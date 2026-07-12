@@ -1,4 +1,4 @@
-import { Raycaster, Vector3 } from 'three';
+import { Plane, Raycaster, Vector3 } from 'three';
 
 class Mouse {
   constructor() {
@@ -13,6 +13,9 @@ class Mouse {
   }
   
   mouseDown(e) {
+    // Some editor modes (drag-to-move, fast build) take over clicking entirely
+    if (app.levelEditor.isVanillaClickingSuppressed()) return;
+
     this.setTolerance();
     if (app.play == false) { app.levelEditor.mouseDown(e); }
     else {
@@ -27,6 +30,9 @@ class Mouse {
   }
 
   mouseUp(e) {
+    // Some editor modes (drag-to-move, fast build) take over clicking entirely
+    if (app.levelEditor.isVanillaClickingSuppressed()) return;
+
     if (app.play == false) {
       if (app.state == 'level-editor') {
         app.levelEditor.mouseUp(e);
@@ -47,6 +53,17 @@ class Mouse {
     // Copy and return position
     if (intersects.length > 0) pos.copy(intersects[0].point);
     return(pos);
+  }
+
+  getPositionOnPlane(e, planeZ = 0) {
+    // Project the pointer onto the z = planeZ plane (works at any camera angle,
+    // unlike getPosition which only intersects the player's z-plane).
+    var raycaster = new Raycaster();
+    var pos = new Vector3();
+    raycaster.setFromCamera(this.getMouse(e), app.camera);
+    var plane = new Plane(new Vector3(0, 0, 1), -planeZ);
+    var hit = raycaster.ray.intersectPlane(plane, pos);
+    return hit ? pos : null;
   }
 
   clickObject(e) {
