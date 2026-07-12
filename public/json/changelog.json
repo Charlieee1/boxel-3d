@@ -862,5 +862,12 @@
       "Improved rendering performance",
       "Improved rope animation"
     ]
+  },
+  {
+    "version": "2.9.2-m1.0.0",
+    "revisions": [
+      "Added LEO as built-in feature",
+      "Added new splash text"
+    ]
   }
 ]

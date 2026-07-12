@@ -247,6 +247,10 @@
   }
 
   function keydown(e) {
+    // Track key state for editor transforms (Shift-duplicate) and putty lock.
+    app.levelEditor.keys[e.code] = true;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = true;
+
     // Ignore keyboard shortcuts when typing in an input field
     const targetTagName = e?.target?.tagName;
     if (targetTagName === 'INPUT' || targetTagName === 'TEXTAREA') return;
@@ -255,6 +259,10 @@
     if (isClosed.value == true || isClosing.value === true) {
       // Jump if one of the keys is pressed
       var jumpKeys = ['Space', 'Enter', 'ArrowUp', 'KeyW'];
+
+      // Hold Q to drag-move blocks directly (works while playing and editing)
+      if (e.code === 'KeyQ') app.levelEditor.enableDragMove();
+
       if (app.play == true) {
         if (e.code == 'Escape' || e.code == 'KeyE') {
           e.preventDefault();
@@ -283,7 +291,12 @@
         }
       }
       else {
-        if (e.code == 'Digit0') {
+        // While the select-block-type submode (A) is armed, the next block-type
+        // key picks an object type directly.
+        if (app.levelEditor.pickBlockType(e.code)) {
+          // consumed as a block-type pick
+        }
+        else if (e.code == 'Digit0') {
           app.levelEditor.resetZAxis();
         }
         else if (e.code == 'Escape' || e.code == 'KeyE') {
@@ -296,7 +309,7 @@
         else if (e.code == 'KeyG' || e.code == 'KeyT') {
           setTransformMode({ detail: 'translate' });
         }
-        else if (e.code == 'KeyQ') {
+        else if (e.code == 'KeyF') {
           setTransformMode({ detail: 'putty' });
         }
         else if (e.code == 'KeyR') {
@@ -320,17 +333,55 @@
           if (e.shiftKey == false) app.levelEditor.undo();
           if (e.shiftKey == true) app.levelEditor.redo();
         }
+        // Toggle intangibility (Ctrl/Cmd-guarded to avoid the devtools shortcut)
+        else if (e.code == 'KeyI' && e.ctrlKey == false && e.metaKey == false) {
+          if (app.levelEditor.isMultiselectTransform()) app.levelEditor.toggleGroupIntangibility();
+          else app.levelEditor.toggleIntangibility();
+        }
+        // Confirm / cancel the active exclusive action
+        else if (e.code == 'KeyC' && app.levelEditor.canConfirmAction()) {
+          app.levelEditor.confirmAction();
+        }
+        else if (e.code == 'KeyV') {
+          app.levelEditor.cancelAction();
+        }
+        // Arm the select-block-type submode (Ctrl/Cmd-guarded vs "select all")
+        else if (e.code == 'KeyA' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.enterSelectBlockTypeMode();
+        }
+        // Fast build / multiselect toggles
+        else if (e.code == 'KeyK' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleFastBuild();
+        }
+        else if (e.code == 'KeyM' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleMultiselect();
+        }
       }
     }
+
+    app.levelEditor.updateRender();
   }
 
   function keyup(e) {
+    // Clear key state and release the editor's Shift-driven modes.
+    app.levelEditor.keys[e.code] = false;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = false;
+    if (e.code === 'KeyQ') app.levelEditor.disableDragMove();
+
+    // Finish the select-block-type submode on key release.
+    if (app.levelEditor.exclusiveAction?.name === 'select-block-type' && app.levelEditor.exclusiveAction.pendingExit) {
+      app.levelEditor.exitSelectBlockTypeMode();
+    }
+
+    // Stop player movement (during play).
     if (e.code == 'KeyA' || e.code == 'ArrowLeft') {
       app.player.setControls('left', 0);
     }
     else if (e.code == 'KeyD' || e.code == 'ArrowRight') {
       app.player.setControls('right', 0);
     }
+
+    app.levelEditor.updateRender();
   }
 
   onMounted(function() {
@@ -409,7 +460,7 @@
         <a class="item" :class="{ selected: selectedMode == 'translate'}" @click="setTransformMode({ detail: 'translate' })" title="Move (T or G)"><img :src="'./svg/move.svg'"></a>
         <a class="item" :class="{ selected: selectedMode == 'scale'}" @click="setTransformMode({ detail: 'scale' })" title="Scale (S)"><img :src="'./svg/scale-out-x.svg'"></a>
         <a class="item" :class="{ selected: selectedMode == 'rotate'}" @click="keydown({ code: 'KeyR' });" title="Rotate (R)"><img :src="'./svg/rotate-clockwise.svg'"></a>
-        <a class="item" :class="{ selected: selectedMode == 'putty'}" @click="keydown({ code: 'KeyQ' });" title="Putty (Q)"><img :src="'./svg/putty.svg'"></a>
+        <a class="item" :class="{ selected: selectedMode == 'putty'}" @click="keydown({ code: 'KeyF' });" title="Putty (F)"><img :src="'./svg/putty.svg'"></a>
         <a class="item" :class="{ selected: selectedObject.isStatic() }" @click="toggleSelectedObjectStaticState" title="Pin"><img :src="'./svg/pin.svg'"></a>
         <a class="item" :class="{ disabled: selectedObject.isStatic() }" @click="toggleFriction" :title="`Friction (${ selectedObject.getFriction() })`"><img :src="'./svg/friction.svg'"></a>
         <a class="item" :class="{ disabled: selectedObject.textEnabled === false }" @click="changeText" title="Text"><img :src="'./svg/type.svg'"></a>

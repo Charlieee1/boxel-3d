@@ -16,3 +16,7 @@ package-lock.json
 *.p12
 *.pfx
 android/keystores/
+
+# Claude local config
+.claude/
+CLAUDE.md

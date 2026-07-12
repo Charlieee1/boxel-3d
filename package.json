@@ -1,6 +1,6 @@
 {
   "name": "boxel-3d",
-  "version": "2.9.2",
+  "version": "2.9.3",
   "description": "Boxel 3D is the 3rd release of your favorite box jumping game made by the developers of Boxel Rebound.",
   "author": "Jacob DeBenedetto",
   "main": "src/js/Main.js",
@@ -41,6 +41,7 @@
     "gulp": "^5.0.1",
     "gulp-zip": "^6.1.0",
     "sass": "^1.100.0",
+    "typescript": "^5.9.3",
     "vite": "^8.0.16",
     "vite-plugin-wasm": "^3.6.0"
   }
