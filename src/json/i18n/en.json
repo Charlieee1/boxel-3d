@@ -143,6 +143,12 @@
       "restore_from": "Restore from...",
       "title": "Data"
     },
+    "general": {
+      "autosave": "Autosave",
+      "autosave_minutes": "{n} min",
+      "autosave_off": "Off",
+      "title": "General"
+    },
     "graphics": {
       "auto_rotate": "Auto Rotate",
       "camera": "Camera",

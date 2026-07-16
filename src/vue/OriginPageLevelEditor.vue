@@ -16,6 +16,107 @@
   const isClosed = ref(true); // Popup animation state
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
+  const textOverlay = ref();
+  const textOverlayRows = [];
+  const blockTypePickerVisible = ref(false);
+  const hoveredBlockType = ref(null);
+
+  // Populates the "A" block-type picker's 4x4 grid, matching the toolbar's object-type column; `null` = empty tile.
+  const BLOCK_TYPE_GRID = [
+    { type: 'cube', label: 'Cube', icon: 'cube.svg' },
+    { type: 'tip', label: 'Tip', icon: 'tip.svg' },
+    { type: 'bounce', label: 'Bounce', icon: 'bounce.svg' },
+    { type: 'checkpoint', label: 'Checkpoint', icon: 'checkpoint.svg' },
+    { type: 'spike', label: 'Spike', icon: 'spike.svg' },
+    { type: 'resize', label: 'Resize', icon: 'grow.svg' },
+    { type: 'direction', label: 'Direction', icon: 'direction.svg' },
+    { type: 'gravity', label: 'Gravity', icon: 'gravity.svg' },
+    { type: 'grapple', label: 'Grapple', icon: 'grapple.svg' },
+    { type: 'finish', label: 'Finish', icon: 'finish.svg' },
+    { type: 'reset', label: 'Reset', icon: 'reset.svg' },
+    { type: 'control', label: 'Control', icon: 'control.svg' },
+    { type: 'power', label: 'Power', icon: 'power.svg' },
+    { type: 'teleport', label: 'Teleport', icon: 'teleport.svg' },
+    null,
+    null
+  ];
+
+  // Blocking editor states shown in the overlay; key-held submodes are omitted
+  const EXCLUSIVE_ACTION_LABELS = {
+    'multiselect': 'Multiselect',
+    'fast-build': 'Fast Build',
+    'thin-build': 'Thin Build'
+  };
+
+  // Stages shown as a second row layered above a blocking state's base label
+  const EXCLUSIVE_ACTION_STAGE_LABELS = {
+    'fast-build': { create: 'Create', scale: 'Scale', rotate: 'Rotate', move: 'Move' },
+    'multiselect': { marquee: 'Box Select', refine: 'Refine', transform: 'Transform' }
+  };
+
+  let stageRowActive = false; // whether the top (stage) row is currently shown
+
+  function onLevelEditorActionStarted(e) {
+    if (e.detail.name === 'select-block-type') blockTypePickerVisible.value = true;
+    const label = EXCLUSIVE_ACTION_LABELS[e.detail.name];
+    if (label) addRow(label);
+  }
+
+  function onLevelEditorActionEnded(e) {
+    if (e.detail.name === 'select-block-type') {
+      blockTypePickerVisible.value = false;
+      hoveredBlockType.value = null;
+    }
+    if (!EXCLUSIVE_ACTION_LABELS[e.detail.name]) return;
+    if (stageRowActive) {
+      removeRow();
+      stageRowActive = false;
+    }
+    removeRow();
+  }
+
+  // Mouse hover on a picker tile: updates the highlight and drives the live type-preview in LevelEditor.js.
+  function hoverBlockType(type) {
+    hoveredBlockType.value = type;
+    if (type != null) app.levelEditor.hoverBlockType(type);
+    else app.levelEditor.clearHoveredBlockType();
+  }
+
+  function onLevelEditorActionStageChanged(e) {
+    const stageLabel = EXCLUSIVE_ACTION_STAGE_LABELS[e.detail.name]?.[e.detail.stage];
+    if (!stageLabel) return;
+    if (stageRowActive) removeRow();
+    addRow(stageLabel);
+    stageRowActive = true;
+  }
+
+  function addRow(text) {
+    if (typeof text !== 'string' || text.length === 0) {
+      console.error('addRow: text must be a non-empty string');
+      return;
+    }
+    if (!textOverlay.value) {
+      console.error('addRow: text overlay is not mounted');
+      return;
+    }
+
+    textOverlayRows.push(text);
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
+
+  function removeRow() {
+    if (textOverlayRows.length === 0) {
+      console.error('removeRow: no rows to remove');
+      return;
+    }
+    if (!textOverlay.value) {
+      console.error('removeRow: text overlay is not mounted');
+      return;
+    }
+
+    textOverlayRows.pop();
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
 
   function addEventListeners() {
     window.addEventListener('exitLevel', resetBackground);
@@ -29,8 +130,11 @@
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
+    window.addEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
+    window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
   }
-  
+
   function removeEventListeners() {
     window.removeEventListener('exitLevel', resetBackground);
     window.removeEventListener('setSelectedObject', setSelectedObject);
@@ -42,6 +146,9 @@
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
+    window.removeEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
+    window.removeEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
+    window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
   }
 
   function popupOpened() {
@@ -72,6 +179,20 @@
 
   function saveLevel() {
     app.levelEditor.saveLevel();
+  }
+
+  // Polls every 10s (not a derived setInterval delay) so changing the slider mid-session takes effect immediately.
+  let autosaveInterval = null;
+  let lastAutosaveTime = 0;
+
+  function checkAutosave() {
+    if (app.play == true) return; // Matches Ctrl+S, which is paused-only.
+    var minutes = app.storage.getSettings().autosave;
+    if (!minutes || minutes <= 0) return;
+    if (Date.now() - lastAutosaveTime >= minutes * 60000) {
+      lastAutosaveTime = Date.now();
+      saveLevel();
+    }
   }
 
   function saveThumbnail() {
@@ -153,7 +274,7 @@
 
   function selectObjectType(e) {
     objectType.value = e.detail.type;
-    app.levelEditor.selectObjectType(e.detail.type, e.detail.checkNull);
+    app.levelEditor.selectObjectType(e.detail.type, e.detail.checkNull, e.detail.saveHistory);
   }
 
   function setSelectedObject(e) {
@@ -291,12 +412,7 @@
         }
       }
       else {
-        // While the select-block-type submode (A) is armed, the next block-type
-        // key picks an object type directly.
-        if (app.levelEditor.pickBlockType(e.code)) {
-          // consumed as a block-type pick
-        }
-        else if (e.code == 'Digit0') {
+        if (e.code == 'Digit0') {
           app.levelEditor.resetZAxis();
         }
         else if (e.code == 'Escape' || e.code == 'KeyE') {
@@ -356,6 +472,9 @@
         else if (e.code == 'KeyM' && e.ctrlKey == false && e.metaKey == false) {
           app.levelEditor.toggleMultiselect();
         }
+        else if (e.code == 'KeyL' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleThinBuild();
+        }
       }
     }
 
@@ -368,8 +487,8 @@
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = false;
     if (e.code === 'KeyQ') app.levelEditor.disableDragMove();
 
-    // Finish the select-block-type submode on key release.
-    if (app.levelEditor.exclusiveAction?.name === 'select-block-type' && app.levelEditor.exclusiveAction.pendingExit) {
+    // Releasing "A" commits the block-type picker's currently hovered tile.
+    if (e.code === 'KeyA' && app.levelEditor.exclusiveAction?.name === 'select-block-type') {
       app.levelEditor.exitSelectBlockTypeMode();
     }
 
@@ -388,6 +507,8 @@
     // Run function after being mounted (visible)
     app.canvas.classList.remove('hidden');
     addEventListeners();
+    lastAutosaveTime = Date.now();
+    autosaveInterval = setInterval(checkAutosave, 10000);
 
     // Dispatch ready event to listeners
     window.dispatchEvent(new CustomEvent('pageMounted', { detail: 'level-editor' }));
@@ -397,6 +518,7 @@
     // Run function after being unmounted (removed);
     app.canvas.classList.add('hidden');
     removeEventListeners();
+    clearInterval(autosaveInterval);
   });
 </script>
 
@@ -472,6 +594,23 @@
         </div>
         <a class="item" @click="duplicateSelectedObject" title="Duplicate (D)"><img :src="'./svg/duplicate.svg'"></a>
         <a class="item" @click="deleteSelectedObject" title="Delete (X)"><img :src="'./svg/trash.svg'"></a>
+      </div>
+    </div>
+    <div class="text-overlay" ref="textOverlay"></div>
+    <div class="block-type-picker" v-if="blockTypePickerVisible">
+      <div class="grid" @mouseleave="hoverBlockType(null)">
+        <div
+          v-for="(entry, i) in BLOCK_TYPE_GRID"
+          :key="i"
+          class="tile"
+          :class="{ filled: entry != null, hovered: entry != null && hoveredBlockType == entry.type }"
+          @mouseenter="hoverBlockType(entry ? entry.type : null)"
+        >
+          <template v-if="entry != null">
+            <img :src="'./svg/' + entry.icon">
+            <span>{{ entry.label }}</span>
+          </template>
+        </div>
       </div>
     </div>
     <OriginControls />

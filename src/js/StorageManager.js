@@ -122,7 +122,8 @@ class StorageManager {
   getSettings() {
     var util = new Utility();
     var storageSettings = localStorage.getItem('settings');
-    var defaultSettings = { 
+    var defaultSettings = {
+      autosave: 0,
       buffer: 100,
       connection: '',
       debug: false,

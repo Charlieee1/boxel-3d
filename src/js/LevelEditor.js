@@ -4,25 +4,6 @@ import { PuttyControls } from './PuttyControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
-// Maps each key in the select-block-type submode (hold A) to its target type.
-// Order matches the toolbar's object-type column (OriginPageLevelEditor.vue).
-const BLOCK_TYPE_KEYS = {
-  Backquote: 'cube',
-  Digit1: 'tip',
-  Digit2: 'bounce',
-  Digit3: 'checkpoint',
-  Digit4: 'spike',
-  Digit5: 'resize',
-  Digit6: 'direction',
-  Digit7: 'gravity',
-  Digit8: 'grapple',
-  Digit9: 'finish',
-  Digit0: 'reset',
-  Minus: 'control',
-  Equal: 'power',
-  Backslash: 'teleport'
-};
-
 // Scratch vector reused for world -> screen projection (multiselect marquee).
 const _screenVec = new Vector3();
 
@@ -59,18 +40,15 @@ class LevelEditor {
     this.selectedMode = 'translate';
     this.puttyAxes = ['X', 'Y', 'Z'];
 
-    // Drag-to-move (hold Q): grab a block under the cursor and slide it directly.
-    // Works regardless of editor/play state — intentionally not gated by
-    // `exclusiveAction` below.
+    // Drag-to-move (hold Q): grab a block under the cursor and slide it; not gated by `exclusiveAction` below.
     this.dragMove = {
       enabled: false,        // true while Q is held
       state: 'static',       // 'static' | 'moving'
-      offset: { x: 0, y: 0 } // grab point relative to the block origin (unsnapped)
+      offset: { x: 0, y: 0 }, // grab point relative to the block origin (unsnapped)
+      moved: false           // true once the grabbed block has actually been repositioned
     };
 
-    // The one editor action allowed to run at a time (ex: select-block-type).
-    // Null when idle; otherwise `{ name, confirm(), cancel() }`. Change it via
-    // startExclusiveAction()/endExclusiveAction(), not direct assignment.
+    // The one editor action allowed to run at a time; null when idle, else { name, confirm(), cancel() }.
     this.exclusiveAction = null;
 
     // Initialize helper visibility from current mode.
@@ -88,8 +66,7 @@ class LevelEditor {
     this.controlsTransform.addEventListener('mouseDown', () => { this.controlsOrbit.enabled = false; this.saveSelectedObject(); });
     this.controlsTransform.addEventListener('mouseUp', () => {
       this.controlsOrbit.enabled = true;
-      // During a group transform the attached object is the temporary control
-      // block, not a real level object — skip the per-object body-sync/save.
+      // During a group transform the attached object is the control block, not a real object — skip body-sync/save.
       if (this.isMultiselectTransform()) return;
       this.updateSelectedObject();
     });
@@ -123,6 +100,7 @@ class LevelEditor {
     this.controlsOrbit.panSpeed = 0;
     if (this.dragMove.enabled) this.dragMoveDown(e);
     else if (this.isMultiselectSelectionStage()) this.multiselectPointerDown(e);
+    else if (this.exclusiveAction?.name === 'thin-build') this.thinBuildPointerDown(e);
     this.updateRender();
   }
 
@@ -136,9 +114,9 @@ class LevelEditor {
 
     if (this.isMultiselectSelectionStage()) this.multiselectPointerMove(e);
     else if (this.exclusiveAction?.name === 'fast-build') this.fastBuildPointerMove(e);
+    else if (this.exclusiveAction?.name === 'thin-build') this.thinBuildPointerMove(e);
 
-    // Restore orbit camera speeds once the drag passes the click threshold, so
-    // the camera stays movable during multiselect (marquee disables only LEFT).
+    // Restore orbit camera speeds once the drag passes the click threshold.
     if (this.isSnapped() == false) {
       this.controlsOrbit.rotateSpeed = this.controlsOrbit.rotateSpeedDefault;
       this.controlsOrbit.panSpeed = this.controlsOrbit.panSpeedDefault;
@@ -152,16 +130,15 @@ class LevelEditor {
     if (this.dragMove.enabled) this.dragMoveUp();
     else if (this.isMultiselectSelectionStage()) this.multiselectPointerUp(e);
     else if (this.exclusiveAction?.name === 'fast-build') this.fastBuildPointerUp(e);
+    else if (this.exclusiveAction?.name === 'thin-build') this.thinBuildPointerUp(e);
     this.updateRender();
   }
 
-  // Whether an editor mode has taken over clicking (drag-to-move, fast build,
-  // multiselect marquee/refine) — Mouse.js skips its own draw/erase/jump/rope
-  // handling while one is active. The multiselect transform stage is not
-  // suppressed: its control block is selected by normal editor clicking.
+  // Whether an editor mode (drag-move, fast/thin build, multiselect marquee/refine) suppresses vanilla clicking; transform stage is not suppressed.
   isVanillaClickingSuppressed() {
     return this.dragMove.enabled
       || this.exclusiveAction?.name === 'fast-build'
+      || this.exclusiveAction?.name === 'thin-build'
       || this.isMultiselectSelectionStage();
   }
 
@@ -173,8 +150,7 @@ class LevelEditor {
     return this.exclusiveAction?.name === 'multiselect' && this.exclusiveAction.stage === 'refine';
   }
 
-  // Both selection stages (marquee + refine) drive the pointer handlers; the
-  // transform stage is driven by the gizmo instead.
+  // Both selection stages (marquee + refine) drive the pointer handlers; transform is driven by the gizmo instead.
   isMultiselectSelectionStage() {
     return this.isMultiselectMarquee() || this.isMultiselectRefine();
   }
@@ -183,22 +159,24 @@ class LevelEditor {
     return this.exclusiveAction?.name === 'multiselect' && this.exclusiveAction.stage === 'transform';
   }
 
-  // Enable/disable the orbit camera's pan/rotate/zoom, so editor modes that take
-  // over the pointer (drag-to-move, fast build, multiselect) manipulate blocks.
+  // Enable/disable orbit pan/rotate/zoom so pointer-driven editor modes can manipulate blocks instead.
   setOrbitInteractionEnabled(enabled) {
     this.controlsOrbit.enablePan = enabled;
     this.controlsOrbit.enableRotate = enabled;
     this.controlsOrbit.enableZoom = enabled;
   }
 
-  // Enable/disable just the LEFT orbit button (default pan). The marquee stage
-  // disables LEFT to draw the marquee, leaving middle/right/wheel for the camera.
+  // Enable/disable just the LEFT orbit button (pan); marquee stage disables it to draw instead.
   setOrbitLeftEnabled(enabled) {
     this.controlsOrbit.mouseButtons.LEFT = enabled ? 2 : null; // 2 = pan
   }
 
-  // Drag-to-move (hold Q): grab whatever block is under the pointer and slide it,
-  // offset-locked to the point you grabbed it at.
+  // Enable/disable just the RIGHT orbit button (rotate); thin build disables it to draw instead.
+  setOrbitRightEnabled(enabled) {
+    this.controlsOrbit.mouseButtons.RIGHT = enabled ? 0 : null; // 0 = rotate
+  }
+
+  // Drag-to-move (hold Q): grab whatever block is under the pointer and slide it, offset-locked to the grab point.
   enableDragMove() {
     if (this.dragMove.enabled) return;
     this.dragMove.enabled = true;
@@ -214,12 +192,12 @@ class LevelEditor {
 
   dragMoveDown(e) {
     if (this.dragMove.state == 'moving') return;
-    // In multiselect transform, Q grabs the group control block so the whole
-    // selection moves together (grabbing a member would desync the remap).
+    // In multiselect transform, Q grabs the group control block so the whole selection moves together.
     var object = this.isMultiselectTransform() ? this.exclusiveAction.controlBlock : app.mouse.clickObject(e);
     if (object == null) return;
 
     this.dragMove.state = 'moving';
+    this.dragMove.moved = false;
     app.selectedObject = object;
 
     // Snap the grab point, then store its (unsnapped) offset from the block origin
@@ -245,6 +223,7 @@ class LevelEditor {
       y: app.mouse.snapToValue(point.y, snap) - this.dragMove.offset.y,
       z: object.position.z
     });
+    this.dragMove.moved = true;
 
     // If the grabbed object is the multiselect control block, remap the group.
     if (this.isMultiselectTransform() && object === this.exclusiveAction.controlBlock) {
@@ -257,20 +236,16 @@ class LevelEditor {
   dragMoveUp() {
     if (this.dragMove.state == 'static') return;
     this.dragMove.state = 'static';
-    // Keep the group control block selected (so its gizmo stays) when Q was used
-    // to move the group; otherwise clear the transient drag selection.
-    app.selectedObject = this.isMultiselectTransform() ? this.exclusiveAction.controlBlock : null;
+    var isGroupMove = this.isMultiselectTransform() && app.selectedObject === this.exclusiveAction.controlBlock;
+    // Outside multiselect, save one entry per move; inside a group transform it's folded into the transform's entry instead.
+    if (this.dragMove.moved && isGroupMove == false) app.levelHistory.save('Moved object');
+    // Keep the control block selected (gizmo stays) if Q moved the group; otherwise clear the transient selection.
+    app.selectedObject = isGroupMove ? this.exclusiveAction.controlBlock : null;
   }
 
-  // Fast build (hold K to toggle): click to place a block, drag to scale it,
-  // click, drag to rotate, click, drag to reposition, click — which finalizes
-  // the block and starts placing the next. Repeat until K (or V, cancel).
-  // Progresses through action.stage ('create' -> 'scale' -> 'rotate' -> 'move'
-  // -> 'create'), driven by the pointerDown/Move/Up handlers.
+  // Fast build (hold K): click-place, drag-scale, drag-rotate, drag-move, click to finalize and start the next block.
   toggleFastBuild() {
-    // While fast build is active, "K" steps back one stage (like an undo of the
-    // last click) rather than toggling off — unless there's no block currently
-    // being built, in which case it disables fast build.
+    // While active, "K" steps back one stage (like undoing the last click) unless no block is mid-placement, then it disables.
     if (this.exclusiveAction?.name === 'fast-build') {
       this.fastBuildStepBack();
       return;
@@ -281,12 +256,10 @@ class LevelEditor {
       confirm: function() {}, // "C" does nothing during fast build
       cancel: () => this.endFastBuild()
     });
-    action.stage = 'create';
+    this.setExclusiveActionStage('create');
     action.block = null;
     action.origin = null;
-    // Camera stays movable while building (pan/zoom/rotate) — the size/rotate/
-    // move stages track free mouse movement, so leaving orbit enabled doesn't
-    // conflict, and lets the user reframe the view between placements.
+    // Camera stays movable while building — the stages track free mouse movement so orbit doesn't conflict.
   }
 
   fastBuildStepBack() {
@@ -298,19 +271,18 @@ class LevelEditor {
       return;
     }
 
-    // Otherwise walk back one stage. Stepping back out of 'scale' discards the
-    // just-placed block and returns to waiting for a placement click.
+    // Otherwise walk back one stage; stepping out of 'scale' discards the just-placed block.
     if (action.stage == 'scale') {
       app.level.removeObject(action.block, true);
       action.block = null;
       action.origin = null;
-      action.stage = 'create';
+      this.setExclusiveActionStage('create');
     }
     else if (action.stage == 'rotate') {
-      action.stage = 'scale';
+      this.setExclusiveActionStage('scale');
     }
     else if (action.stage == 'move') {
-      action.stage = 'rotate';
+      this.setExclusiveActionStage('rotate');
     }
   }
 
@@ -321,26 +293,26 @@ class LevelEditor {
   }
 
   fastBuildPointerUp(e) {
-    // A "click" (not a camera drag/orbit) advances to the next stage, using the
-    // editor's own click-vs-drag tolerance (isSnapped()).
+    // A "click" (not a camera drag) advances to the next stage, using isSnapped() as the click-vs-drag tolerance.
     if (this.controlsOrbit.moved || this.isSnapped() == false) return;
 
     var action = this.exclusiveAction;
     if (action.stage == 'create') {
       this.fastBuildCreateBlock(e);
-      action.stage = 'scale';
+      this.setExclusiveActionStage('scale');
     }
     else if (action.stage == 'scale') {
-      action.stage = 'rotate';
+      this.setExclusiveActionStage('rotate');
     }
     else if (action.stage == 'rotate') {
-      action.stage = 'move';
+      this.setExclusiveActionStage('move');
     }
     else if (action.stage == 'move') {
-      // Finalize this block and go straight into placing the next one
+      // Finalize this block (one history entry per completed block, not per stage) and start the next one.
+      app.levelHistory.save('Added ' + action.block.getClass());
       action.block = null;
       action.origin = null;
-      action.stage = 'create';
+      this.setExclusiveActionStage('create');
     }
   }
 
@@ -404,16 +376,94 @@ class LevelEditor {
     action.block.updateHelper();
   }
 
-  // ============================== Multiselect ==============================
-  // Drag a 2D marquee rectangle on screen and every object whose projected
-  // center falls inside it is captured, then transform the whole group.
-  //
-  // Three stages, "C" advancing each:
-  //   1. 'marquee'   — drag the 2D rectangle to (re)select captured objects
-  //   2. 'refine'    — click individual objects to add/remove them
-  //   3. 'transform' — translucent control block + gizmo remaps the group
-  // "V" (or "M") cancels from any stage. The camera stays movable throughout
-  // (marquee disables only the LEFT orbit button; refine/transform keep it).
+  // Thin build (press L): right-drag draws a 1-block-wide strip in one continuous gesture, then starts the next one.
+  toggleThinBuild() {
+    if (this.exclusiveAction?.name === 'thin-build') {
+      this.endThinBuild();
+      return;
+    }
+    if (this.canPerformEditorAction() == false) return;
+
+    var action = this.startExclusiveAction('thin-build', {
+      confirm: function() {}, // "C" does nothing during thin build
+      cancel: () => this.endThinBuild()
+    });
+    action.block = null;
+    action.origin = null;
+    this.setOrbitRightEnabled(false); // right-drag draws; left/middle/wheel still orbit (pan/zoom, no rotate)
+  }
+
+  endThinBuild() {
+    // Discard whatever's mid-drag (a block only exists between pointerdown and pointerup)
+    if (this.exclusiveAction?.block) app.level.removeObject(this.exclusiveAction.block, true);
+    this.setOrbitRightEnabled(true);
+    this.endExclusiveAction();
+  }
+
+  thinBuildPointerDown(e) {
+    if (e.button !== 2) return; // only the right button draws; left/middle still orbit
+    var action = this.exclusiveAction;
+    if (action.block != null) return; // already dragging one out
+
+    var pos = app.mouse.getPosition(e);
+    pos.x = app.mouse.snapToValue(pos.x, app.mouse.snap);
+    pos.y = app.mouse.snapToValue(pos.y, app.mouse.snap);
+
+    var type = this.selectedObjectType;
+    var block = app.level.entityFactory.createObject(type);
+    app.level.setObjectProperties(block, {
+      class: type,
+      isStatic: true,
+      position: { x: pos.x, y: pos.y, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: app.BOX_SIZE, y: app.BOX_SIZE, z: app.BOX_SIZE }
+    });
+    app.level.addObject(block);
+
+    action.block = block;
+    action.origin = pos;
+  }
+
+  thinBuildPointerMove(e) {
+    var action = this.exclusiveAction;
+    if (action.block == null) return; // no block yet: still waiting for pointerdown
+
+    var pos = app.mouse.getPosition(e);
+    var origin = action.origin;
+    var dx = pos.x - origin.x;
+    var dy = pos.y - origin.y;
+    var length = Math.hypot(dx, dy);
+    var angle = Math.atan2(dy, dx);
+    if (app.mouse.snap > 1) {
+      angle = Math.round(angle / (Math.PI / 12)) * (Math.PI / 12); // 15 degree steps
+      length = app.mouse.snapToValue(length, app.mouse.snap);
+    }
+    length = Math.max(length, app.mouse.snap); // never collapse to a zero-length block
+    var endX = origin.x + Math.cos(angle) * length;
+    var endY = origin.y + Math.sin(angle) * length;
+
+    app.level.setObjectProperties(action.block, {
+      position: { x: 0.5 * (origin.x + endX), y: 0.5 * (origin.y + endY), z: 0 },
+      rotation: { x: 0, y: 0, z: angle },
+      scale: { x: length, y: app.BOX_SIZE, z: app.BOX_SIZE }
+    });
+
+    action.block.updateMatrixWorld();
+    action.block.updateHelper();
+  }
+
+  thinBuildPointerUp(e) {
+    if (e.button !== 2) return;
+    var action = this.exclusiveAction;
+    if (action.block == null) return; // no in-progress block (e.g. a right/middle click)
+
+    // Finalize this block (one history entry per completed block) and start the next one.
+    app.levelHistory.save('Added ' + action.block.getClass());
+    action.block = null;
+    action.origin = null;
+  }
+
+  // ============================== Multiselect: marquee-select a group of objects, then transform them together via "C". ==============================
 
   toggleMultiselect() {
     if (this.exclusiveAction?.name === 'multiselect') {
@@ -429,7 +479,7 @@ class LevelEditor {
       confirm: () => this.enterMultiselectRefine(),
       cancel: () => this.cleanupMultiselect()
     });
-    action.stage = 'marquee';
+    this.setExclusiveActionStage('marquee');
     action.selected = [];
     action.marquee = { active: false, dragged: false, x1: 0, y1: 0, x2: 0, y2: 0 };
     action.controlBlock = null;
@@ -443,15 +493,14 @@ class LevelEditor {
   enterMultiselectRefine() {
     var action = this.exclusiveAction;
     if (action.stage !== 'marquee') return;
-    action.stage = 'refine';
+    this.setExclusiveActionStage('refine');
     action.confirm = () => this.enterMultiselectTransform();
     action.cancel = () => this.cleanupMultiselect();
     this.setOrbitLeftEnabled(true); // left-click toggles, left-drag pans the camera
     this.hideMarquee();
   }
 
-  // Shared teardown for every exit path (cancel at any stage, group delete, and
-  // the editor-exit safety net). Leaves the level in its current live state.
+  // Shared teardown for every exit path (cancel, group delete, editor-exit safety net).
   cleanupMultiselect() {
     var action = this.exclusiveAction;
     if (action == null || action.name !== 'multiselect') return;
@@ -493,8 +542,7 @@ class LevelEditor {
     if (m.dragged == false && (Math.abs(m.x2 - m.x1) + Math.abs(m.y2 - m.y1)) <= 4) return;
     m.dragged = true;
 
-    // Only the marquee stage draws/previews a rectangle; in refine, a left-drag
-    // is a camera pan (handled by orbit), so we just remember it was a drag.
+    // Only the marquee stage draws a rectangle; in refine a left-drag is just a camera pan.
     if (this.isMultiselectMarquee()) {
       this.showMarquee();
       this.updateMarqueeRect(m.x1, m.y1, m.x2, m.y2);
@@ -514,8 +562,7 @@ class LevelEditor {
       if (m.dragged) this.setMultiselectSelection(this.objectsInScreenRect(m.x1, m.y1, e.clientX, e.clientY));
     }
     else if (this.isMultiselectRefine()) {
-      // Stage 2: a plain click toggles the object under the cursor (a drag was a
-      // camera pan and is ignored).
+      // Stage 2: a plain click toggles the object under the cursor (a drag was just a camera pan).
       if (m.dragged == false) {
         var obj = app.mouse.clickObject(e);
         if (obj && obj.isCube === true && obj !== app.player) {
@@ -566,8 +613,7 @@ class LevelEditor {
   highlightObject(obj) {
     if (obj.getClass && obj.getClass() === 'player') return;
     if (obj._msOriginalColor == null) obj._msOriginalColor = obj.color;
-    // White, or cyan if the block is already white, for contrast. updateOrigin=
-    // false so the block's stored colorOrigin stays its real color.
+    // White, or cyan if already white, for contrast; updateOrigin=false keeps the stored color intact.
     obj.setColors(obj._msOriginalColor === '#ffffff' ? '#00ffff' : '#ffffff', false);
     obj.updateMatrixWorld();
   }
@@ -643,8 +689,7 @@ class LevelEditor {
       boxX: (maxX - minX) || app.BOX_SIZE, boxY: (maxY - minY) || app.BOX_SIZE, boxZ: (maxZ - minZ) || app.BOX_SIZE
     };
 
-    // Preserve the pre-transform history point so confirm/cancel resolve to one
-    // clean entry regardless of how many gizmo drags (or duplications) happen.
+    // Preserve the pre-transform history point so confirm/cancel always resolve to one clean entry.
     if (action.historyIndex == null) action.historyIndex = app.levelHistory.historyIndex;
 
     var box = action.groupBox;
@@ -658,10 +703,7 @@ class LevelEditor {
     app.level.addObject(block);
     action.controlBlock = block;
 
-    // Keep the box translucent through normal selection so it never hides the
-    // group behind it, and keep it cyan (baseSelect would recolor it white on
-    // select). This only adjusts the block's appearance — it does NOT change
-    // clicking; the box is selected/deselected by normal editor clicks.
+    // Keep the control block translucent and cyan through normal selection (baseSelect would otherwise recolor it white); doesn't affect clicking.
     var baseSelect = block.select.bind(block);
     block.select = state => { baseSelect(state); block.shapes.setColors('#00ffff', false); block.shapes.setOpacities(0.2); };
 
@@ -671,7 +713,7 @@ class LevelEditor {
     block.select(true);
     this.attachControls(block);
 
-    action.stage = 'transform';
+    this.setExclusiveActionStage('transform');
     action.confirm = () => this.confirmMultiselectTransform();
     action.cancel = () => this.cancelMultiselectTransform();
     this.setOrbitLeftEnabled(true); // left-drag pans; the gizmo captures its handles
@@ -680,9 +722,7 @@ class LevelEditor {
     this.updateRender();
   }
 
-  // Remap every selected object from the control block's current transform:
-  // relative position scaled by the box factors, rotated by the control block's
-  // rotation, then translated to it.
+  // Remap every selected object from the control block's transform: scale by box factors, rotate, then translate.
   updateGroupTransform() {
     var action = this.exclusiveAction;
     if (this.isMultiselectTransform() == false) return;
@@ -742,8 +782,7 @@ class LevelEditor {
   }
 
   confirmMultiselectTransform() {
-    // Objects are already at their transformed positions — just drop the control
-    // block and collapse the intermediate history into one clean entry.
+    // Objects are already at their transformed positions — drop the control block and collapse history into one entry.
     var idx = this.exclusiveAction.historyIndex;
     this.cleanupMultiselect();
     if (idx != null) {
@@ -775,9 +814,7 @@ class LevelEditor {
   duplicateMultiselectGroup() {
     var action = this.exclusiveAction;
 
-    // Duplicate each selected object; the copies (offset for visibility) become
-    // the new selection and a fresh transform stage is built around them. The
-    // originals keep whatever transform was applied so far.
+    // Duplicate each selected object; the offset copies become the new selection with a fresh transform stage.
     var copies = action.selected.map(obj => app.level.duplicateObject(obj));
     copies.forEach(copy => {
       copy.setPosition({
@@ -800,9 +837,7 @@ class LevelEditor {
     this.enterMultiselectTransform();
   }
 
-  // "I" during a group transform toggles intangibility for the whole selection.
-  // The group snapshot's z is kept in sync so the ongoing proportional remap
-  // preserves the change (and it survives save/reload).
+  // "I" during a group transform toggles intangibility for the whole selection, keeping the snapshot's z in sync.
   toggleGroupIntangibility() {
     var action = this.exclusiveAction;
     this.toggleIntangibility(action.selected);
@@ -866,13 +901,12 @@ class LevelEditor {
         if (target) {
           // Copy selected object color to target color
           if (e.shiftKey === true) {
-            // During a group transform, copy the clicked block's color onto
-            // every block in the selection — never onto the blue control block.
+            // During a group transform, copy the clicked block's color onto every selected block (never the control block).
             if (this.isMultiselectTransform()) {
               var action = this.exclusiveAction;
               if (target !== action.controlBlock) {
+                // No history entry here — recoloring is folded into the transform's own single entry on confirm/cancel.
                 action.selected.forEach(obj => obj.setColors(target.color));
-                app.levelHistory.save('Copied color to selection');
                 this.updateRender();
               }
               return;
@@ -956,9 +990,7 @@ class LevelEditor {
   }
 
   duplicateSelectedObject(offset = { x: 0, y: 0, z: 0 }) {
-    // During multiselect, "D" acts on the whole group (transform stage) and is a
-    // no-op during marquee selection — return before the app.selectedObject
-    // deref below (which is the control block or null under multiselect).
+    // During multiselect, "D" acts on the whole group (transform stage only) — return before the selectedObject deref below.
     if (this.exclusiveAction?.name === 'multiselect') {
       if (this.exclusiveAction.stage === 'transform') this.duplicateMultiselectGroup();
       return;
@@ -1001,15 +1033,12 @@ class LevelEditor {
     app.resetScene();
     app.level.deselectLevel();
     app.level.saveLevelData();
-    // Remember the history point we saved at, so exiting right after a save
-    // doesn't re-prompt "save this level?" (see exitLevel).
+    // Remember the history point we saved at, so exiting right after doesn't re-prompt "save this level?".
     this.savedHistoryIndex = app.levelHistory.historyIndex;
   }
 
   exitLevel() {
-    // Only prompt to save when there are edits AND they're unsaved since the
-    // last Ctrl+S / save-button (previously it prompted after any edit, even
-    // right after saving).
+    // Only prompt to save when there are edits AND they're unsaved since the last Ctrl+S/save-button.
     var hasEdits = app.levelHistory.history.length > 2;
     var unsaved = app.levelHistory.historyIndex !== this.savedHistoryIndex;
     if (hasEdits && unsaved) {
@@ -1029,10 +1058,7 @@ class LevelEditor {
   }
 
   saveAndExitLevelEditor(saveLevel) {
-    // Safety net: if the editor is exited (ex: Escape) while an exclusive
-    // action is active, resolve it so it can't leave editor actions gated
-    // permanently — there's no other exit path once its owning key state is
-    // torn down (it's all inline in keyDown/keyUp, no separate listener).
+    // Safety net: resolve any active exclusive action on exit so it can't leave editor actions gated permanently.
     this.cancelAction();
 
     this.controlsOrbit.enabled = false;
@@ -1189,13 +1215,13 @@ class LevelEditor {
     window.dispatchEvent(new CustomEvent('setSelectedMode', { detail: mode }));
   }
 
-  selectObjectType(type, checkNull = true) {
+  selectObjectType(type, checkNull = true, saveHistory = true) {
     // Swap object by type
     if (app.selectedObject != null && checkNull == true) {
       app.selectedObject = app.level.changeObjectType(app.selectedObject, type);
       app.selectedObject.select(true);
       app.levelEditor.attachControls(app.selectedObject);
-      app.levelHistory.save('Changed object to ' + type);
+      if (saveHistory == true) app.levelHistory.save('Changed object to ' + type);
       window.dispatchEvent(new CustomEvent('setSelectedObject', { detail: app.selectedObject }));
     }
 
@@ -1212,10 +1238,7 @@ class LevelEditor {
     window.dispatchEvent(new CustomEvent('setSelectedObject', { detail: app.selectedObject }));
   }
 
-  // Whether a popup/dialog is currently open under either UI theme (Origin's
-  // `.dialog` or Bubble's `.popup`). `.settings` is excluded because Bubble's
-  // settings panel keeps the `popup` class while staying in the DOM (v-show),
-  // so the visibility check guards against it and similar overlays.
+  // Whether a popup/dialog is open under either UI theme (`.dialog`/`.popup`, excluding the always-in-DOM `.settings` panel).
   isEditorPopupOpen() {
     var blockers = document.querySelectorAll('.dialog:not(.settings), .popup:not(.settings)');
     for (var i = 0; i < blockers.length; i++) {
@@ -1228,37 +1251,41 @@ class LevelEditor {
     return app.state == 'level-editor' && app.play == false;
   }
 
-  // Gates starting a new exclusive editor action: must be paused in the editor,
-  // no popup open, and nothing else already holding exclusiveAction.
+  // Gates starting a new exclusive editor action: paused, no popup, and nothing else holding exclusiveAction.
   canPerformEditorAction() {
     return this.isEditorPaused() && this.exclusiveAction == null && this.isEditorPopupOpen() == false;
   }
 
-  // Gates the "C" confirm keybind. Unlike canPerformEditorAction(), it does not
-  // check exclusiveAction — confirm's job is to resolve the active action. Still
-  // requires the paused editor (KeyC collides with respawn) and no open popup.
+  // Gates "C" confirm: unlike canPerformEditorAction(), doesn't check exclusiveAction since confirm's job is to resolve it.
   canConfirmAction() {
     return this.isEditorPaused() && this.isEditorPopupOpen() == false;
   }
 
-  // Claims the exclusive-action slot for a multi-step editor action. Returns the
-  // record so the caller can attach extra cleanup state. `confirm`/`cancel`
-  // default to just releasing the slot.
+  // Claims the exclusive-action slot for a multi-step editor action; `confirm`/`cancel` default to releasing the slot.
   startExclusiveAction(name, { confirm, cancel } = {}) {
     this.exclusiveAction = {
       name: name,
       confirm: confirm || (() => this.endExclusiveAction()),
       cancel: cancel || (() => this.endExclusiveAction())
     };
+    window.dispatchEvent(new CustomEvent('levelEditorActionStarted', { detail: { name } }));
     return this.exclusiveAction;
   }
 
   endExclusiveAction() {
+    var name = this.exclusiveAction?.name;
     this.exclusiveAction = null;
+    if (name) window.dispatchEvent(new CustomEvent('levelEditorActionEnded', { detail: { name } }));
   }
 
-  // "C"/"V" keybinds: resolve whatever's currently claiming exclusiveAction.
-  // No-ops when nothing is active.
+  // Updates the active exclusive action's stage and announces the change
+  setExclusiveActionStage(stage) {
+    if (this.exclusiveAction == null) return;
+    this.exclusiveAction.stage = stage;
+    window.dispatchEvent(new CustomEvent('levelEditorActionStageChanged', { detail: { name: this.exclusiveAction.name, stage } }));
+  }
+
+  // "C"/"V" keybinds: resolve whatever's currently claiming exclusiveAction; no-op when nothing is active.
   confirmAction() {
     if (this.exclusiveAction) this.exclusiveAction.confirm();
   }
@@ -1267,44 +1294,50 @@ class LevelEditor {
     if (this.exclusiveAction) this.exclusiveAction.cancel();
   }
 
-  // "A" arms a one-shot submode where the next key from BLOCK_TYPE_KEYS picks an
-  // object type directly, without clicking the toolbar. Dispatches the same
-  // `selectObjectType` event a toolbar click would, so it also changes the
-  // selected object's type if one is selected.
+  // "A" (held) shows the block-type picker: hovering live-previews a type, releasing commits it with one history entry.
   enterSelectBlockTypeMode() {
     if (this.canPerformEditorAction() == false) return;
 
     var action = this.startExclusiveAction('select-block-type', {
       confirm: () => this.exitSelectBlockTypeMode(),
-      cancel: () => this.exitSelectBlockTypeMode()
+      cancel: () => this.cancelSelectBlockTypeMode()
     });
-
-    // Suppress "0" -> reset Z axis while "0" is reserved for picking block
-    // type index 10 (reset cube) below. Restored in exitSelectBlockTypeMode.
-    action.resetZAxisOriginal = this.resetZAxis;
-    this.resetZAxis = function() {};
+    action.originalType = this.selectedObjectType;
+    action.hoveredType = null;
   }
 
+  // Live-previews `type` on the selected object without touching levelHistory; no-op if unchanged.
+  hoverBlockType(type) {
+    if (this.exclusiveAction?.name !== 'select-block-type') return;
+    if (this.exclusiveAction.hoveredType === type) return;
+    this.exclusiveAction.hoveredType = type;
+    window.dispatchEvent(new CustomEvent('selectObjectType', { detail: { type, checkNull: true, saveHistory: false } }));
+  }
+
+  // Reverts the live preview to the type active before the submode was armed.
+  clearHoveredBlockType() {
+    if (this.exclusiveAction?.name !== 'select-block-type') return;
+    this.hoverBlockType(this.exclusiveAction.originalType);
+  }
+
+  // "A" released: commit the currently-previewed type with one history entry, only if it differs from the original.
   exitSelectBlockTypeMode() {
     if (this.exclusiveAction?.name !== 'select-block-type') return;
-    this.resetZAxis = this.exclusiveAction.resetZAxisOriginal;
+    var action = this.exclusiveAction;
+    if (action.hoveredType != null && action.hoveredType !== action.originalType) {
+      app.levelHistory.save('Changed object to ' + action.hoveredType);
+    }
     this.endExclusiveAction();
   }
 
-  // While the select-block-type submode is armed, picks the object type mapped
-  // to `code` (if any) and defers the exit to keyUp. Returns whether the key was
-  // consumed as a pick.
-  pickBlockType(code) {
-    if (this.exclusiveAction?.name !== 'select-block-type') return false;
-    var blockType = BLOCK_TYPE_KEYS[code];
-    if (blockType == null) return false;
-    window.dispatchEvent(new CustomEvent('selectObjectType', { detail: { type: blockType, checkNull: true } }));
-    this.exclusiveAction.pendingExit = true;
-    return true;
+  // "V" cancel: revert the live preview to the original type and end the submode without saving history.
+  cancelSelectBlockTypeMode() {
+    if (this.exclusiveAction?.name !== 'select-block-type') return;
+    this.hoverBlockType(this.exclusiveAction.originalType);
+    this.endExclusiveAction();
   }
 
-  // Adds or removes an object's physics body from the live Matter world based on
-  // its z depth: only z == 0 objects collide (matches Level.addObject).
+  // Adds or removes an object's physics body from the live Matter world based on z depth (only z==0 collides).
   updateObjectPhysicsState(target) {
     if (target.position.z == 0) {
       target.body.collisionFilter.mask = -1;
@@ -1323,15 +1356,13 @@ class LevelEditor {
     }
   }
 
-  // Marks a block as decorative/non-colliding by nudging its z off the 0 plane,
-  // removing/re-adding the physics body immediately so it stops colliding the
-  // moment you toggle it. `objects` defaults to the current selection;
-  // multiselect passes the whole group.
+  // Marks blocks decorative/non-colliding by nudging z off 0 and syncing the physics body immediately; `objects` defaults to the current selection.
   toggleIntangibility(objects) {
     if (objects == null) objects = app.selectedObject ? [app.selectedObject] : [];
     if (objects.length === 0) return;
     if (this.canPerformEditorAction() == false && this.isMultiselectTransform() == false) return;
 
+    var changed = false;
     objects.forEach(obj => {
       if (obj.positionOrigin.z == 0) {
         obj.positionOrigin.z = -1e-6;
@@ -1343,10 +1374,14 @@ class LevelEditor {
       }
       else return;
 
+      changed = true;
       this.updateObjectPhysicsState(obj);
       obj.updateMatrixWorld();
       window.dispatchEvent(new CustomEvent('objectChange', { detail: obj }));
     });
+
+    // Outside multiselect, save one entry per toggle; inside a group transform it's folded into the transform's entry instead.
+    if (changed && this.isMultiselectTransform() == false) app.levelHistory.save('Toggled intangibility');
 
     this.updateRender();
     this.controlsTransform.dispatchEvent({ type: 'change' });

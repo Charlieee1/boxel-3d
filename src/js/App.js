@@ -53,7 +53,7 @@ class App {
     this.scene.add(this.level);
     
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 2000);
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000);
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
