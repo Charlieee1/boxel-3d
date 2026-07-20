@@ -13,6 +13,7 @@
   const themeOptionsVisible = ref(false);
   const selectedMode = ref(app.levelEditor.controlsTransform.mode);
   const coordinates = ref('0, 0, 0');
+  const currentZ = ref(app.levelEditor.currentZ || 0); // "current Z": new blocks spawn here, "0" key resets to here
   const isClosed = ref(true); // Popup animation state
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
@@ -54,7 +55,28 @@
     'multiselect': { marquee: 'Box Select', refine: 'Refine', transform: 'Transform' }
   };
 
+  // Third row shown during multiselect transform + scale mode, reflecting the current scale-lock cycle
+  const SCALE_LOCK_LABELS = {
+    'free': 'Scale (Unlocked)',
+    'xy-locked': 'Scale (Locked XY)',
+    'xyz-locked': 'Scale (Locked XYZ)'
+  };
+
   let stageRowActive = false; // whether the top (stage) row is currently shown
+  let scaleLockRowActive = false; // whether the scale-lock row is currently shown
+
+  // Shows/hides/refreshes the scale-lock row based on current mode + multiselect transform state
+  function updateScaleLockRow() {
+    if (scaleLockRowActive) {
+      removeRow();
+      scaleLockRowActive = false;
+    }
+    if (app.levelEditor.isMultiselectTransform() && selectedMode.value === 'scale') {
+      var mode = app.levelEditor.exclusiveAction?.scaleMode || 'free';
+      addRow(SCALE_LOCK_LABELS[mode]);
+      scaleLockRowActive = true;
+    }
+  }
 
   function onLevelEditorActionStarted(e) {
     if (e.detail.name === 'select-block-type') blockTypePickerVisible.value = true;
@@ -68,6 +90,10 @@
       hoveredBlockType.value = null;
     }
     if (!EXCLUSIVE_ACTION_LABELS[e.detail.name]) return;
+    if (scaleLockRowActive) {
+      removeRow();
+      scaleLockRowActive = false;
+    }
     if (stageRowActive) {
       removeRow();
       stageRowActive = false;
@@ -85,9 +111,14 @@
   function onLevelEditorActionStageChanged(e) {
     const stageLabel = EXCLUSIVE_ACTION_STAGE_LABELS[e.detail.name]?.[e.detail.stage];
     if (!stageLabel) return;
+    if (scaleLockRowActive) {
+      removeRow();
+      scaleLockRowActive = false;
+    }
     if (stageRowActive) removeRow();
     addRow(stageLabel);
     stageRowActive = true;
+    updateScaleLockRow();
   }
 
   function addRow(text) {
@@ -289,6 +320,7 @@
   function setTransformMode(e) {
     selectedMode.value = e.detail;
     app.levelEditor.setMode(e.detail);
+    updateScaleLockRow();
   }
 
   function updateCoordinatesFromEvent(e) {
@@ -318,10 +350,15 @@
     }
   }
 
-  function toggleFriction(e) {
-    const friction = selectedObject.value.getFriction();
-    if (friction == 1) selectedObject.value.setFriction(0, true);
-    else selectedObject.value.setFriction(1, true);
+  // "Current Z" textbox: new blocks spawn here, and "0" resets the selection here (level-editor only, no effect on gameplay).
+  function updateCurrentZFromEvent(e) {
+    const value = parseInt(e.target.value) || 0;
+    currentZ.value = value;
+    app.levelEditor.setCurrentZ(value);
+  }
+
+  function updateFriction(e) {
+    selectedObject.value.setFriction(e.target.value);
     app.levelHistory.save('Updated object properties');
   }
 
@@ -412,6 +449,9 @@
         }
       }
       else {
+        // Any key other than B/N invalidates a pending "B,_" chord immediately, so a stale wait never lingers.
+        if (e.code !== 'KeyB' && e.code !== 'KeyN') app.levelEditor.chordPending = null;
+
         if (e.code == 'Digit0') {
           app.levelEditor.resetZAxis();
         }
@@ -439,6 +479,10 @@
           if (e.ctrlKey == true) {
             e.preventDefault();
             app.levelEditor.saveLevel();
+          }
+          else if (app.levelEditor.isMultiselectTransform() && app.levelEditor.selectedMode === 'scale') {
+            app.levelEditor.cycleMultiselectScaleMode();
+            updateScaleLockRow();
           }
           else setTransformMode({ detail: 'scale' });
         }
@@ -474,6 +518,16 @@
         }
         else if (e.code == 'KeyL' && e.ctrlKey == false && e.metaKey == false) {
           app.levelEditor.toggleThinBuild();
+        }
+        else if (e.code == 'KeyH' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleHoverPreview();
+        }
+        // Flip/mirror chord (B,B = XZ, B,N = YZ); repeat-guarded so held-key auto-repeat can't flood history.
+        else if (e.code == 'KeyB' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
+          app.levelEditor.handleChordB();
+        }
+        else if (e.code == 'KeyN' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
+          app.levelEditor.handleChordN();
         }
       }
     }
@@ -558,6 +612,13 @@
             @change="updatePositionFromEvent($event)"
           >
         </a>
+        <a class="item auto" title="Current Z (new blocks spawn here; &quot;0&quot; resets selection here)">
+          <input class="current-z"
+            v-model="currentZ"
+            v-on:keyup.enter="$event.target.blur()"
+            @change="updateCurrentZFromEvent($event)"
+          >
+        </a>
         <OriginButtonSettings class="item last" />
       </div>
     </div>
@@ -584,7 +645,10 @@
         <a class="item" :class="{ selected: selectedMode == 'rotate'}" @click="keydown({ code: 'KeyR' });" title="Rotate (R)"><img :src="'./svg/rotate-clockwise.svg'"></a>
         <a class="item" :class="{ selected: selectedMode == 'putty'}" @click="keydown({ code: 'KeyF' });" title="Putty (F)"><img :src="'./svg/putty.svg'"></a>
         <a class="item" :class="{ selected: selectedObject.isStatic() }" @click="toggleSelectedObjectStaticState" title="Pin"><img :src="'./svg/pin.svg'"></a>
-        <a class="item" :class="{ disabled: selectedObject.isStatic() }" @click="toggleFriction" :title="`Friction (${ selectedObject.getFriction() })`"><img :src="'./svg/friction.svg'"></a>
+        <div class="item" :class="{ disabled: selectedObject.isStatic() }">
+          <a action="friction" title="Friction"><img :src="'./svg/friction.svg'"></a>
+          <div class="slider"><input name="friction" type="range" min="0" max="1" step="0.25" :value="selectedObject.getFriction()" @change="updateFriction($event)"></div>
+        </div>
         <a class="item" :class="{ disabled: selectedObject.textEnabled === false }" @click="changeText" title="Text"><img :src="'./svg/type.svg'"></a>
         <div class="item">
           <label>

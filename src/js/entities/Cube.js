@@ -65,10 +65,8 @@ class Cube extends Mesh {
 
     if (this.position.y < -1000) {
       if (this.getClass() == 'player' && this.isStatic() == false) this.kill();
-      else {
-        app.level.removeObject(this, true);
-        //this.resetToOrigin();
-      }
+      // Freeze + hide instead of removing, so resetLevel() can still find and revive it.
+      else if (this.visible) this.hide(true);
     }
 
     // Update helper

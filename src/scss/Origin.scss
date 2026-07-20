@@ -355,7 +355,7 @@
 
       &.object-options {
         background-color: #252526;
-        overflow-y: auto;
+        overflow: visible; // No auto-scroll clip here - it'd cut off popouts like the friction slider
       }
 
       .item {

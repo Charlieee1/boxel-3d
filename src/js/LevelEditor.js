@@ -38,6 +38,7 @@ class LevelEditor {
     this.snap = 16;
     this.keys = {};
     this.selectedMode = 'translate';
+    this.currentZ = 0; // editor-wide "current Z" (textbox): new blocks spawn here, "0" resets the selection here
     this.puttyAxes = ['X', 'Y', 'Z'];
 
     // Drag-to-move (hold Q): grab a block under the cursor and slide it; not gated by `exclusiveAction` below.
@@ -51,24 +52,40 @@ class LevelEditor {
     // The one editor action allowed to run at a time; null when idle, else { name, confirm(), cancel() }.
     this.exclusiveAction = null;
 
+    // "H" toggle: hovering an object shows the active tool's gizmo without clicking to select first.
+    this.hoverPreviewEnabled = false;
+    this.hoverPreviewObject = null; // object currently gizmo-attached via hover only, not a real selection
+    this.hoverDragActive = false; // true while a drag borrows app.selectedObject from a hover-only attach
+    this.hoverDragRestoreTo = null; // app.selectedObject value to restore once that borrowed drag ends
+    this.puttyDragging = false; // DragControls exposes no public dragging flag, so track it ourselves
+    this.puttyHovering = false; // Tracked from PuttyControls' hoveron/hoveroff, DragControls exposes no public getter
+
+    // "B,B"/"B,N" chord: mirror the selection. First "B" arms a short window; only a second B or N within it does anything.
+    this.chordPending = null; // 'B' while armed, else null
+    this.chordPendingAt = 0;
+    this.CHORD_WINDOW_MS = 400;
+
     // Initialize helper visibility from current mode.
     this.applyControlsModeState();
 
     // Putty constrols events
-    this.controlsPutty.addEventListener('dragstart', () => { this.controlsOrbit.enabled = false; this.saveSelectedObject(); });
-    this.controlsPutty.addEventListener('dragend', () => { this.controlsOrbit.enabled = true; this.updateSelectedObject(); });
+    this.controlsPutty.addEventListener('dragstart', () => { this.controlsOrbit.enabled = false; this.puttyDragging = true; this.beginHoverDrag(); this.saveSelectedObject(); });
+    this.controlsPutty.addEventListener('dragend', () => { this.controlsOrbit.enabled = true; this.puttyDragging = false; this.updateSelectedObject(); this.endHoverDrag(); });
     this.controlsPutty.addEventListener('objectChange', () => {
       this.controlsPutty.moved = true;
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
+    this.controlsPutty.addEventListener('hoveron', () => { this.puttyHovering = true; });
+    this.controlsPutty.addEventListener('hoveroff', () => { this.puttyHovering = false; });
 
     // Transform controls events
-    this.controlsTransform.addEventListener('mouseDown', () => { this.controlsOrbit.enabled = false; this.saveSelectedObject(); });
+    this.controlsTransform.addEventListener('mouseDown', () => { this.controlsOrbit.enabled = false; this.beginHoverDrag(); this.saveSelectedObject(); });
     this.controlsTransform.addEventListener('mouseUp', () => {
       this.controlsOrbit.enabled = true;
-      // During a group transform the attached object is the control block, not a real object — skip body-sync/save.
-      if (this.isMultiselectTransform()) return;
+      // During a group transform the attached object is the control block, not a real object - skip body-sync/save.
+      if (this.isMultiselectTransform()) { this.endHoverDrag(); return; }
       this.updateSelectedObject();
+      this.endHoverDrag();
     });
     this.controlsTransform.addEventListener('objectChange', () => {
       this.controlsTransform.moved = true;
@@ -259,7 +276,7 @@ class LevelEditor {
     this.setExclusiveActionStage('create');
     action.block = null;
     action.origin = null;
-    // Camera stays movable while building — the stages track free mouse movement so orbit doesn't conflict.
+    // Camera stays movable while building - the stages track free mouse movement so orbit doesn't conflict.
   }
 
   fastBuildStepBack() {
@@ -327,7 +344,7 @@ class LevelEditor {
     app.level.setObjectProperties(block, {
       class: type,
       isStatic: true,
-      position: { x: pos.x, y: pos.y, z: 0 },
+      position: { x: pos.x, y: pos.y, z: this.currentZ },
       rotation: { x: 0, y: 0, z: 0 },
       scale: { x: app.BOX_SIZE, y: app.BOX_SIZE, z: app.BOX_SIZE }
     });
@@ -348,7 +365,7 @@ class LevelEditor {
       var origin = action.origin;
 
       app.level.setObjectProperties(action.block, {
-        position: { x: 0.5 * (origin.x + pos2.x), y: 0.5 * (origin.y + pos2.y), z: 0 },
+        position: { x: 0.5 * (origin.x + pos2.x), y: 0.5 * (origin.y + pos2.y), z: this.currentZ },
         rotation: { x: 0, y: 0, z: 0 },
         scale: {
           x: Math.abs(origin.x - pos2.x),
@@ -414,7 +431,7 @@ class LevelEditor {
     app.level.setObjectProperties(block, {
       class: type,
       isStatic: true,
-      position: { x: pos.x, y: pos.y, z: 0 },
+      position: { x: pos.x, y: pos.y, z: this.currentZ },
       rotation: { x: 0, y: 0, z: 0 },
       scale: { x: app.BOX_SIZE, y: app.BOX_SIZE, z: app.BOX_SIZE }
     });
@@ -443,7 +460,7 @@ class LevelEditor {
     var endY = origin.y + Math.sin(angle) * length;
 
     app.level.setObjectProperties(action.block, {
-      position: { x: 0.5 * (origin.x + endX), y: 0.5 * (origin.y + endY), z: 0 },
+      position: { x: 0.5 * (origin.x + endX), y: 0.5 * (origin.y + endY), z: this.currentZ },
       rotation: { x: 0, y: 0, z: angle },
       scale: { x: length, y: app.BOX_SIZE, z: app.BOX_SIZE }
     });
@@ -486,6 +503,7 @@ class LevelEditor {
     action.originalStats = null;
     action.groupBox = null;
     action.historyIndex = null;
+    action.scaleMode = 'free'; // 'free' | 'xy-locked' | 'xyz-locked'
     this.setOrbitLeftEnabled(false); // left = marquee; middle/right/wheel = camera
   }
 
@@ -664,7 +682,7 @@ class LevelEditor {
     if (action.stage === 'transform') return; // already there
     if (action.selected.length === 0) return; // nothing captured: stay put
 
-    // The translucent control block is the indicator now — drop the highlights
+    // The translucent control block is the indicator now - drop the highlights
     action.selected.forEach(obj => this.unhighlightObject(obj));
     this.hideMarquee();
 
@@ -734,6 +752,31 @@ class LevelEditor {
     var factorY = ctrl.scale.y / box.boxY;
     var factorZ = ctrl.scale.z / box.boxZ;
 
+    // Apply scale mode constraints
+    var scaleMode = action.scaleMode || 'free';
+    if (scaleMode === 'xy-locked') {
+      // Propagate whichever of X/Y is actually being dragged (furthest from 1) to the other, don't average them
+      var xyFactor = Math.abs(factorX - 1) >= Math.abs(factorY - 1) ? factorX : factorY;
+      factorX = xyFactor;
+      factorY = xyFactor;
+    }
+    else if (scaleMode === 'xyz-locked') {
+      // Propagate whichever axis is actually being dragged (furthest from 1) to the other two, don't average them
+      var driveAxis = Math.abs(factorX - 1) >= Math.abs(factorY - 1) ? 'x' : 'y';
+      if (Math.abs(factorZ - 1) > Math.abs(driveAxis === 'x' ? factorX - 1 : factorY - 1)) driveAxis = 'z';
+      var allFactor = driveAxis === 'x' ? factorX : (driveAxis === 'y' ? factorY : factorZ);
+      factorX = allFactor;
+      factorY = allFactor;
+      factorZ = allFactor;
+    }
+
+    // Keep the selection box's own displayed scale in sync with the locked factors, not just the raw drag.
+    if (scaleMode !== 'free') {
+      ctrl.setScale({ x: box.boxX * factorX, y: box.boxY * factorY, z: box.boxZ * factorZ }, true);
+      ctrl.updateMatrixWorld();
+      ctrl.updateHelper();
+    }
+
     for (var i = 0; i < action.selected.length; i++) {
       var obj = action.selected[i];
       var o = action.originalStats[i];
@@ -782,7 +825,7 @@ class LevelEditor {
   }
 
   confirmMultiselectTransform() {
-    // Objects are already at their transformed positions — drop the control block and collapse history into one entry.
+    // Objects are already at their transformed positions - drop the control block and collapse history into one entry.
     var idx = this.exclusiveAction.historyIndex;
     this.cleanupMultiselect();
     if (idx != null) {
@@ -796,6 +839,15 @@ class LevelEditor {
     this.revertGroupTransform();
     this.cleanupMultiselect();
     if (idx != null) this.truncateHistory(idx); // back to the pre-transform state
+  }
+
+  cycleMultiselectScaleMode() {
+    var action = this.exclusiveAction;
+    if (this.isMultiselectTransform() == false) return;
+    var modes = ['free', 'xy-locked', 'xyz-locked'];
+    var currentIndex = modes.indexOf(action.scaleMode || 'free');
+    action.scaleMode = modes[(currentIndex + 1) % modes.length];
+    this.updateGroupTransform();
   }
 
   deleteMultiselectGroup() {
@@ -835,6 +887,13 @@ class LevelEditor {
     action.selected = copies;
     action.stage = 'refine';   // any non-transform stage so enterMultiselectTransform() proceeds
     this.enterMultiselectTransform();
+  }
+
+  // "D" held mid-drag: stamp a duplicate at the current location without interrupting the live drag or applying an offset.
+  stampMultiselectGroupDuplicate() {
+    var action = this.exclusiveAction;
+    action.selected.forEach(obj => app.level.duplicateObject(obj));
+    this.updateRender();
   }
 
   // "I" during a group transform toggles intangibility for the whole selection, keeping the snapshot's z in sync.
@@ -884,6 +943,7 @@ class LevelEditor {
 
   mouseMove(e) {
     app.mouse.setPosition('move', app.mouse.getPosition(e));
+    this.updateHoverPreview(e);
   }
 
   mouseUp(e) {
@@ -905,7 +965,7 @@ class LevelEditor {
             if (this.isMultiselectTransform()) {
               var action = this.exclusiveAction;
               if (target !== action.controlBlock) {
-                // No history entry here — recoloring is folded into the transform's own single entry on confirm/cancel.
+                // No history entry here - recoloring is folded into the transform's own single entry on confirm/cancel.
                 action.selected.forEach(obj => obj.setColors(target.color));
                 this.updateRender();
               }
@@ -940,10 +1000,10 @@ class LevelEditor {
               class: objectType,
               color: app.level.entityFactory.color,
               isStatic: true,
-              position: { 
-                x: app.mouse.snapToValue(app.mouse.down.x, app.mouse.snap), 
-                y: app.mouse.snapToValue(app.mouse.down.y, app.mouse.snap), 
-                z: 0 
+              position: {
+                x: app.mouse.snapToValue(app.mouse.down.x, app.mouse.snap),
+                y: app.mouse.snapToValue(app.mouse.down.y, app.mouse.snap),
+                z: this.currentZ
               },
               rotation: { x: 0, y: 0, z: 0 },
               scale: { x: app.BOX_SIZE, y: app.BOX_SIZE, z: app.BOX_SIZE }
@@ -990,9 +1050,13 @@ class LevelEditor {
   }
 
   duplicateSelectedObject(offset = { x: 0, y: 0, z: 0 }) {
-    // During multiselect, "D" acts on the whole group (transform stage only) — return before the selectedObject deref below.
+    // During multiselect, "D" acts on the whole group (transform stage only) - return before the selectedObject deref below.
     if (this.exclusiveAction?.name === 'multiselect') {
-      if (this.exclusiveAction.stage === 'transform') this.duplicateMultiselectGroup();
+      if (this.exclusiveAction.stage === 'transform') {
+        // Mid-translate-drag: stamp a copy at the current drag location instead of ending the transform.
+        if (this.controlsTransform.dragging && this.selectedMode === 'translate') this.stampMultiselectGroupDuplicate();
+        else this.duplicateMultiselectGroup();
+      }
       return;
     }
 
@@ -1026,6 +1090,73 @@ class LevelEditor {
       app.levelHistory.save('Deleted object');
       window.dispatchEvent(new CustomEvent('setSelectedObject'));
     }
+  }
+
+  // "B" chord key: arms a short window; a second B within it mirrors XZ, otherwise the chord lapses (see keydown).
+  handleChordB() {
+    var now = performance.now();
+    if (this.chordPending === 'B' && (now - this.chordPendingAt) <= this.CHORD_WINDOW_MS) {
+      this.chordPending = null;
+      this.mirrorSelection('xz');
+    }
+    else {
+      this.chordPending = 'B';
+      this.chordPendingAt = now;
+    }
+  }
+
+  // "N" only acts as the second half of a pending "B,N" chord (mirror YZ); alone it's reserved for item #10 (force build).
+  handleChordN() {
+    if (this.chordPending === 'B' && (performance.now() - this.chordPendingAt) <= this.CHORD_WINDOW_MS) {
+      this.chordPending = null;
+      this.mirrorSelection('yz');
+    }
+  }
+
+  // "B,B"/"B,N": mirror the selection across its own XZ/YZ plane; never falls back to app.selectedObject during multiselect since it's stale once M is active.
+  mirrorSelection(plane) {
+    if (this.exclusiveAction?.name === 'multiselect') {
+      if (this.exclusiveAction.stage === 'transform') this.mirrorMultiselectGroup(plane);
+      return;
+    }
+    this.mirrorSingleObject(plane);
+  }
+
+  mirrorSingleObject(plane) {
+    if (app.selectedObject == null) return;
+    this.applyMirrorFlip(app.selectedObject, plane);
+    app.selectedObject.updateMatrixWorld();
+    app.selectedObject.updateHelper();
+    app.levelHistory.save('Mirrored object');
+  }
+
+  // Mirrors every selected block's position around the live control block center, plus each block's own flip - folds into the transform's one history entry, same as Q/I/D above.
+  mirrorMultiselectGroup(plane) {
+    var action = this.exclusiveAction;
+    if (action.selected.length === 0) return;
+    var ctrl = action.controlBlock;
+    if (ctrl == null) return;
+
+    action.selected.forEach((obj, i) => {
+      if (plane === 'xz') obj.position.y = 2 * ctrl.position.y - obj.position.y;
+      else obj.position.x = 2 * ctrl.position.x - obj.position.x;
+      obj.setPosition(obj.position);
+      this.applyMirrorFlip(obj, plane);
+      obj.updateMatrixWorld();
+      obj.updateHelper();
+
+      // Keep the transform snapshot in sync so a later drag or cancel doesn't silently discard the mirror.
+      var o = action.originalStats[i];
+      o.x = obj.position.x; o.y = obj.position.y; o.z = obj.position.z;
+      o.rx = obj.rotation.x; o.ry = obj.rotation.y; o.rz = obj.rotation.z;
+    });
+    this.updateRender();
+  }
+
+  // Toggles a 180° flip flag for the given plane; purely visual since Matter.js's 2D body only reads rotation.z.
+  applyMirrorFlip(obj, plane) {
+    if (plane === 'xz') obj.setRotation({ x: obj.rotation.x === 0 ? Math.PI : 0, y: obj.rotation.y, z: obj.rotation.z });
+    else obj.setRotation({ x: obj.rotation.x, y: obj.rotation.y === 0 ? Math.PI : 0, z: obj.rotation.z });
   }
 
   saveLevel() {
@@ -1114,11 +1245,19 @@ class LevelEditor {
     }
   }
 
+  // "0": resets the selected object's z to the "current Z" textbox value (not always 0).
   resetZAxis() {
     if (app.selectedObject) {
-      app.selectedObject.position.z = 0;
+      app.selectedObject.position.z = this.currentZ;
       this.updateSelectedObject();
+      // Push the new position to the Vue-side coords display, same as the click-select path does.
+      window.dispatchEvent(new CustomEvent('setSelectedObject', { detail: app.selectedObject }));
     }
+  }
+
+  // Called from the level-editor UI's "current Z" textbox; new blocks spawn here, and "0" resets to here.
+  setCurrentZ(value) {
+    this.currentZ = value;
   }
 
   updateSelectedObject() {
@@ -1192,6 +1331,68 @@ class LevelEditor {
         this.controlsTransform.showZ = true;
       }
     }
+  }
+
+  // "H" toggles hover-preview: while on, hovering any object shows the active tool's gizmo without clicking.
+  toggleHoverPreview() {
+    this.hoverPreviewEnabled = !this.hoverPreviewEnabled;
+    // Never re-attach mid-drag (would yank the gizmo out from under an active drag) - endHoverDrag() finishes this once the drag ends.
+    if (this.hoverPreviewEnabled == false && this.isHoverDragBlocked() == false) this.clearHoverPreview();
+  }
+
+  // Whether a drag is already in progress (on either control), so hover shouldn't retarget the gizmo mid-drag.
+  isHoverDragBlocked() {
+    return this.controlsTransform.dragging === true || this.puttyDragging === true;
+  }
+
+  // Whether the cursor is currently over the active gizmo itself (its own picker geometry), not the hovered block.
+  isMouseOverGizmo() {
+    return this.controlsTransform.axis != null || this.puttyHovering === true;
+  }
+
+  // Re-point the gizmo at whatever's under the cursor while hover-preview is on; no-op if nothing changed.
+  updateHoverPreview(e) {
+    if (this.hoverPreviewEnabled == false) return;
+    if (this.isEditorPaused() == false) return;
+    if (this.isHoverDragBlocked()) return; // don't interrupt an in-progress drag elsewhere
+    if (this.exclusiveAction != null || this.isVanillaClickingSuppressed()) return; // stay out of other editor modes
+
+    var target = app.mouse.clickObject(e);
+    var current = this.hoverPreviewObject || app.selectedObject;
+    if (target === current) return;
+
+    if (target) {
+      this.hoverPreviewObject = target;
+      this.attachControls(target);
+    }
+    // Stay attached while the cursor is over the gizmo itself, even though it's no longer over the block.
+    else if (this.isMouseOverGizmo() == false) this.clearHoverPreview();
+  }
+
+  // Drop the hover-only attach, falling back to the real selection (if any) or nothing.
+  clearHoverPreview() {
+    this.hoverPreviewObject = null;
+    if (app.selectedObject) this.attachControls(app.selectedObject);
+    else this.detachControls();
+  }
+
+  // A drag starting on a hover-only attach borrows app.selectedObject for its duration (body-sync relies on it).
+  beginHoverDrag() {
+    if (this.hoverPreviewObject && app.selectedObject !== this.hoverPreviewObject) {
+      this.hoverDragActive = true;
+      this.hoverDragRestoreTo = app.selectedObject;
+      app.selectedObject = this.hoverPreviewObject;
+    }
+  }
+
+  // Hands app.selectedObject back once a borrowed hover-drag finishes.
+  endHoverDrag() {
+    if (this.hoverDragActive == false) return;
+    app.selectedObject = this.hoverDragRestoreTo;
+    this.hoverDragActive = false;
+    this.hoverDragRestoreTo = null;
+    // "H" was toggled off mid-drag: finish the deferred cleanup now that it's safe to re-attach.
+    if (this.hoverPreviewEnabled == false) this.clearHoverPreview();
   }
 
   setMode(mode) {
