@@ -60,19 +60,26 @@ class LevelEditor {
     this.puttyDragging = false; // DragControls exposes no public dragging flag, so track it ourselves
     this.puttyHovering = false; // Tracked from PuttyControls' hoveron/hoveroff, DragControls exposes no public getter
 
-    // "B,B"/"B,N" chord: mirror the selection. First "B" arms a short window; only a second B or N within it does anything.
+    // "B,B"/"B,N" chord: flip the selection. First "B" arms indefinitely; a following B or N completes it.
     this.chordPending = null; // 'B' while armed, else null
-    this.chordPendingAt = 0;
-    this.CHORD_WINDOW_MS = 400;
 
     // Initialize helper visibility from current mode.
     this.applyControlsModeState();
 
     // Putty constrols events
     this.controlsPutty.addEventListener('dragstart', () => { this.controlsOrbit.enabled = false; this.puttyDragging = true; this.beginHoverDrag(); this.saveSelectedObject(); });
-    this.controlsPutty.addEventListener('dragend', () => { this.controlsOrbit.enabled = true; this.puttyDragging = false; this.updateSelectedObject(); this.endHoverDrag(); });
+    this.controlsPutty.addEventListener('dragend', () => {
+      this.controlsOrbit.enabled = true;
+      this.puttyDragging = false;
+      // During a group transform the attached object is the control block, not a real object - skip body-sync/save.
+      if (this.isMultiselectTransform()) { this.endHoverDrag(); return; }
+      this.updateSelectedObject();
+      this.endHoverDrag();
+    });
     this.controlsPutty.addEventListener('objectChange', () => {
       this.controlsPutty.moved = true;
+      // Remap the whole selection as the group control block is putty-dragged.
+      if (this.isMultiselectTransform()) this.updateGroupTransform();
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
     this.controlsPutty.addEventListener('hoveron', () => { this.puttyHovering = true; });
@@ -1078,9 +1085,23 @@ class LevelEditor {
   }
 
   deleteSelectedObject() {
-    // During multiselect, "X" deletes the whole group (transform stage only).
+    // During multiselect, "X" deletes the whole group (transform stage only) - but only if the
+    // targeted object is actually the group (control block or a selected member); a separate block
+    // clicked outside the group while transform is active should just delete itself instead.
     if (this.exclusiveAction?.name === 'multiselect') {
-      if (this.exclusiveAction.stage === 'transform') this.deleteMultiselectGroup();
+      if (this.exclusiveAction.stage === 'transform') {
+        var action = this.exclusiveAction;
+        var target = app.selectedObject;
+        var isGroupTarget = target != null && (target === action.controlBlock || action.selected.includes(target));
+        if (target != null && isGroupTarget == false) {
+          app.level.removeObject(target, true);
+          app.levelEditor.detachControls();
+          app.selectedObject = null;
+          app.levelHistory.save('Deleted object');
+          window.dispatchEvent(new CustomEvent('setSelectedObject'));
+        }
+        else this.deleteMultiselectGroup();
+      }
       return;
     }
 
@@ -1092,46 +1113,47 @@ class LevelEditor {
     }
   }
 
-  // "B" chord key: arms a short window; a second B within it mirrors XZ, otherwise the chord lapses (see keydown).
+  // "B" chord key: arms indefinitely; a second B flips XZ, otherwise the chord lapses (see keydown).
   handleChordB() {
-    var now = performance.now();
-    if (this.chordPending === 'B' && (now - this.chordPendingAt) <= this.CHORD_WINDOW_MS) {
+    if (this.chordPending === 'B') {
       this.chordPending = null;
-      this.mirrorSelection('xz');
+      window.dispatchEvent(new CustomEvent('flipChordCleared'));
+      this.flipSelection('xz');
     }
     else {
       this.chordPending = 'B';
-      this.chordPendingAt = now;
+      window.dispatchEvent(new CustomEvent('flipChordArmed'));
     }
   }
 
-  // "N" only acts as the second half of a pending "B,N" chord (mirror YZ); alone it's reserved for item #10 (force build).
+  // "N" only acts as the second half of a pending "B,N" chord (flip YZ); alone it's reserved for item #10 (force build).
   handleChordN() {
-    if (this.chordPending === 'B' && (performance.now() - this.chordPendingAt) <= this.CHORD_WINDOW_MS) {
+    if (this.chordPending === 'B') {
       this.chordPending = null;
-      this.mirrorSelection('yz');
+      window.dispatchEvent(new CustomEvent('flipChordCleared'));
+      this.flipSelection('yz');
     }
   }
 
-  // "B,B"/"B,N": mirror the selection across its own XZ/YZ plane; never falls back to app.selectedObject during multiselect since it's stale once M is active.
-  mirrorSelection(plane) {
+  // "B,B"/"B,N": flip the selection across its own XZ/YZ plane; never falls back to app.selectedObject during multiselect since it's stale once M is active.
+  flipSelection(plane) {
     if (this.exclusiveAction?.name === 'multiselect') {
-      if (this.exclusiveAction.stage === 'transform') this.mirrorMultiselectGroup(plane);
+      if (this.exclusiveAction.stage === 'transform') this.flipMultiselectGroup(plane);
       return;
     }
-    this.mirrorSingleObject(plane);
+    this.flipSingleObject(plane);
   }
 
-  mirrorSingleObject(plane) {
+  flipSingleObject(plane) {
     if (app.selectedObject == null) return;
-    this.applyMirrorFlip(app.selectedObject, plane);
+    this.applyFlip(app.selectedObject, plane);
     app.selectedObject.updateMatrixWorld();
     app.selectedObject.updateHelper();
-    app.levelHistory.save('Mirrored object');
+    app.levelHistory.save('Flipped object');
   }
 
-  // Mirrors every selected block's position around the live control block center, plus each block's own flip - folds into the transform's one history entry, same as Q/I/D above.
-  mirrorMultiselectGroup(plane) {
+  // Flips every selected block's position around the live control block center, plus each block's own flip - folds into the transform's one history entry, same as Q/I/D above.
+  flipMultiselectGroup(plane) {
     var action = this.exclusiveAction;
     if (action.selected.length === 0) return;
     var ctrl = action.controlBlock;
@@ -1141,11 +1163,11 @@ class LevelEditor {
       if (plane === 'xz') obj.position.y = 2 * ctrl.position.y - obj.position.y;
       else obj.position.x = 2 * ctrl.position.x - obj.position.x;
       obj.setPosition(obj.position);
-      this.applyMirrorFlip(obj, plane);
+      this.applyFlip(obj, plane);
       obj.updateMatrixWorld();
       obj.updateHelper();
 
-      // Keep the transform snapshot in sync so a later drag or cancel doesn't silently discard the mirror.
+      // Keep the transform snapshot in sync so a later drag or cancel doesn't silently discard the flip.
       var o = action.originalStats[i];
       o.x = obj.position.x; o.y = obj.position.y; o.z = obj.position.z;
       o.rx = obj.rotation.x; o.ry = obj.rotation.y; o.rz = obj.rotation.z;
@@ -1154,7 +1176,7 @@ class LevelEditor {
   }
 
   // Toggles a 180° flip flag for the given plane; purely visual since Matter.js's 2D body only reads rotation.z.
-  applyMirrorFlip(obj, plane) {
+  applyFlip(obj, plane) {
     if (plane === 'xz') obj.setRotation({ x: obj.rotation.x === 0 ? Math.PI : 0, y: obj.rotation.y, z: obj.rotation.z });
     else obj.setRotation({ x: obj.rotation.x, y: obj.rotation.y === 0 ? Math.PI : 0, z: obj.rotation.z });
   }

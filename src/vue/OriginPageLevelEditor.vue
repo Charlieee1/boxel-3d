@@ -64,6 +64,20 @@
 
   let stageRowActive = false; // whether the top (stage) row is currently shown
   let scaleLockRowActive = false; // whether the scale-lock row is currently shown
+  let flipChordRowActive = false; // whether the "Flip (Pending)" row is currently shown
+
+  // Arms/clears the "B,_" flip chord row; kept separate from the addRow/removeRow stack since it can start/end independently of any other row.
+  function onFlipChordArmed() {
+    if (flipChordRowActive) return;
+    addRow('Flip (Pending)');
+    flipChordRowActive = true;
+  }
+
+  function onFlipChordCleared() {
+    if (!flipChordRowActive) return;
+    removeRowByText('Flip (Pending)');
+    flipChordRowActive = false;
+  }
 
   // Shows/hides/refreshes the scale-lock row based on current mode + multiselect transform state
   function updateScaleLockRow() {
@@ -149,6 +163,14 @@
     textOverlay.value.textContent = textOverlayRows.join('\n');
   }
 
+  // Removes a specific row by its text instead of only the last one, so it can be cleared independently of the stack.
+  function removeRowByText(text) {
+    const index = textOverlayRows.lastIndexOf(text);
+    if (index === -1 || !textOverlay.value) return;
+    textOverlayRows.splice(index, 1);
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
+
   function addEventListeners() {
     window.addEventListener('exitLevel', resetBackground);
     window.addEventListener('setSelectedObject', setSelectedObject);
@@ -164,6 +186,8 @@
     window.addEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.addEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
+    window.addEventListener('flipChordArmed', onFlipChordArmed);
+    window.addEventListener('flipChordCleared', onFlipChordCleared);
   }
 
   function removeEventListeners() {
@@ -180,6 +204,8 @@
     window.removeEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.removeEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
+    window.removeEventListener('flipChordArmed', onFlipChordArmed);
+    window.removeEventListener('flipChordCleared', onFlipChordCleared);
   }
 
   function popupOpened() {
@@ -238,19 +264,22 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
 
+    // Capture the old theme's default color first, so only blocks still matching it recolor
+    const oldTheme = app.level.getTheme(app.level.theme);
+
     // Store current theme settings
     const theme = app.level.getTheme(name);
     selectedTheme.value = name;
     app.background.setTheme(theme.model);
     app.level.entityFactory.color = theme.color;
     app.level.theme = name;
-    
+
     // Recreate current level with new theme data
     const json = app.level.exportToJSON();
 
-    // Change each child color to theme color
+    // Only recolor children still matching the old theme's default; manually-set colors are preserved
     json.children.forEach(child => {
-      if (child.color) child.color = theme.color;
+      if (child.color && oldTheme && child.color === oldTheme.color) child.color = theme.color;
     });
 
     app.level.clearLevel();
@@ -450,7 +479,10 @@
       }
       else {
         // Any key other than B/N invalidates a pending "B,_" chord immediately, so a stale wait never lingers.
-        if (e.code !== 'KeyB' && e.code !== 'KeyN') app.levelEditor.chordPending = null;
+        if (e.code !== 'KeyB' && e.code !== 'KeyN' && app.levelEditor.chordPending !== null) {
+          app.levelEditor.chordPending = null;
+          window.dispatchEvent(new CustomEvent('flipChordCleared'));
+        }
 
         if (e.code == 'Digit0') {
           app.levelEditor.resetZAxis();
@@ -522,7 +554,7 @@
         else if (e.code == 'KeyH' && e.ctrlKey == false && e.metaKey == false) {
           app.levelEditor.toggleHoverPreview();
         }
-        // Flip/mirror chord (B,B = XZ, B,N = YZ); repeat-guarded so held-key auto-repeat can't flood history.
+        // Flip chord (B,B = XZ, B,N = YZ); repeat-guarded so held-key auto-repeat can't flood history.
         else if (e.code == 'KeyB' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
           app.levelEditor.handleChordB();
         }
