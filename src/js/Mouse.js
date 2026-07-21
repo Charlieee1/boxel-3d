@@ -31,7 +31,7 @@ class Mouse {
 
   mouseUp(e) {
     // Some editor modes (drag-to-move, fast build) take over clicking entirely
-    if (app.levelEditor.isVanillaClickingSuppressed()) return;
+    if (app.levelEditor.isVanillaClickingSuppressed() || e.cutOutHandled) return;
 
     if (app.play == false) {
       if (app.state == 'level-editor') {

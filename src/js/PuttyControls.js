@@ -345,7 +345,7 @@ class PuttyControls extends Controls {
 
     // DragControls sets the canvas cursor to "pointer" on hover (right after
     // this dispatch, on the hover transition only). Keep the normal cursor
-    // instead — deferred to a microtask so it runs after that synchronous write.
+    // instead - deferred to a microtask so it runs after that synchronous write.
     queueMicrotask(() => { if (this.domElement) this.domElement.style.cursor = ''; });
 
     // Bubble up event

@@ -14,6 +14,7 @@
   const selectedMode = ref(app.levelEditor.controlsTransform.mode);
   const coordinates = ref('0, 0, 0');
   const currentZ = ref(app.levelEditor.currentZ || 0); // "current Z": new blocks spawn here, "0" key resets to here
+  const defaultColor = ref(app.level.defaultBlockColor || app.level.getTheme(app.level.theme).color); // effective default new-block color
   const isClosed = ref(true); // Popup animation state
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
@@ -46,7 +47,8 @@
   const EXCLUSIVE_ACTION_LABELS = {
     'multiselect': 'Multiselect',
     'fast-build': 'Fast Build',
-    'thin-build': 'Thin Build'
+    'thin-build': 'Thin Build',
+    'cut-out': 'Cut Out'
   };
 
   // Stages shown as a second row layered above a blocking state's base label
@@ -77,6 +79,21 @@
     if (!flipChordRowActive) return;
     removeRowByText('Flip (Pending)');
     flipChordRowActive = false;
+  }
+
+  // Shows/hides the persistent "Force Build" row; independent of the addRow/removeRow LIFO stack, like the flip-chord row.
+  let forceBuildRowActive = false;
+
+  function onForceBuildEnabled() {
+    if (forceBuildRowActive) return;
+    addRow('Force Build');
+    forceBuildRowActive = true;
+  }
+
+  function onForceBuildDisabled() {
+    if (!forceBuildRowActive) return;
+    removeRowByText('Force Build');
+    forceBuildRowActive = false;
   }
 
   // Shows/hides/refreshes the scale-lock row based on current mode + multiselect transform state
@@ -188,6 +205,9 @@
     window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
     window.addEventListener('flipChordArmed', onFlipChordArmed);
     window.addEventListener('flipChordCleared', onFlipChordCleared);
+    window.addEventListener('themeSelected', onThemeSelected);
+    window.addEventListener('forceBuildEnabled', onForceBuildEnabled);
+    window.addEventListener('forceBuildDisabled', onForceBuildDisabled);
   }
 
   function removeEventListeners() {
@@ -206,6 +226,9 @@
     window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
     window.removeEventListener('flipChordArmed', onFlipChordArmed);
     window.removeEventListener('flipChordCleared', onFlipChordCleared);
+    window.removeEventListener('themeSelected', onThemeSelected);
+    window.removeEventListener('forceBuildEnabled', onForceBuildEnabled);
+    window.removeEventListener('forceBuildDisabled', onForceBuildDisabled);
   }
 
   function popupOpened() {
@@ -272,6 +295,7 @@
     selectedTheme.value = name;
     app.background.setTheme(theme.model);
     app.level.entityFactory.color = theme.color;
+    if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
     app.level.theme = name;
 
     // Recreate current level with new theme data
@@ -396,6 +420,18 @@
     app.levelHistory.save('Updated object properties');
   }
 
+  // Toolbar swatch: sets the level's persisted default new-block color and refreshes the live runtime cache
+  function updateDefaultColor(e) {
+    app.level.defaultBlockColor = e.target.value;
+    app.level.entityFactory.color = e.target.value;
+    defaultColor.value = e.target.value;
+  }
+
+  // Keeps the default-color swatch synced when a theme switch changes the effective default
+  function onThemeSelected(e) {
+    defaultColor.value = app.level.defaultBlockColor || e.detail.color;
+  }
+
   function changeText() {
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
@@ -404,6 +440,20 @@
         inputs: [
           { value: app.selectedObject.text, type: 'text', callback: updateText },
           { value: 'Cancel', type: 'button' },
+          { value: 'Close', type: 'button' }
+        ]
+      }
+    }));
+  }
+
+  // "]" popup: type an exact camera X/Y; each input applies immediately on change, no confirm step needed.
+  function openSetCameraPositionPopup() {
+    window.dispatchEvent(new CustomEvent('openPopup', {
+      detail: {
+        text: 'Set Camera Position',
+        inputs: [
+          { label: 'X', type: 'text', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
+          { label: 'Y', type: 'text', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
           { value: 'Close', type: 'button' }
         ]
       }
@@ -559,7 +609,22 @@
           app.levelEditor.handleChordB();
         }
         else if (e.code == 'KeyN' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
-          app.levelEditor.handleChordN();
+          if (e.shiftKey == true) {
+            app.levelEditor.deselectCurrentObject();
+          }
+          else {
+            app.levelEditor.handleChordN();
+          }
+        }
+        else if (e.code == 'BracketLeft') {
+          app.levelEditor.resetCameraZRotation();
+        }
+        else if (e.code == 'BracketRight') {
+          openSetCameraPositionPopup();
+        }
+        else if (e.code == 'Slash' && e.ctrlKey == false && e.metaKey == false) {
+          e.preventDefault();
+          app.levelEditor.enterCutOutMode();
         }
       }
     }
@@ -632,6 +697,12 @@
             </li>
           </ul>
         </a>
+        <div class="item">
+          <label>
+            <a title="Default block color"><img :src="'./svg/color.svg'"></a>
+            <input name="default-color" type="color" :value="defaultColor" @change="updateDefaultColor($event)">
+          </label>
+        </div>
         <a class="item" @click="undo" title="Undo edit (Ctrl + Z)"><img :src="'./svg/undo.svg'"></a>
         <a class="item" @click="redo" title="Redo edit (Ctrl + Shift + Z)"><img :src="'./svg/redo.svg'"></a>
         <a class="item" @click="rewind" title="Restart level"><img :src="'./svg/rewind.svg'"></a>

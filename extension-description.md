@@ -9,6 +9,19 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.2-m1.1.0
+- Added thin fast build mode
+- Added textbox to change default building plane
+- Added hover gizmo mode
+- Improved multiselect
+- Added force build mode
+- Added extra keybinds
+- Added block cutting operation
+- Added current action display overlay
+- Added default block colour setting
+- Added autosave
+- Added new settings tab
+
 v2.9.2-m1.0.0
 - Added LEO as built-in feature
 - Added new splash text

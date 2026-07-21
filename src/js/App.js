@@ -405,6 +405,8 @@ class App {
       app.timer.reset();
       app.level.clearLevel();
       app.level.importFromJSON(options.json);
+      // Apply level's custom default color override, if set (loaded above by importFromJSON)
+      if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
       app.level.publishedFileId = options.publishedFileId; // Steam level ID
       app.saveOrbitState();
       app.background.visible = true;

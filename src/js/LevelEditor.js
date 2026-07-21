@@ -52,6 +52,9 @@ class LevelEditor {
     // The one editor action allowed to run at a time; null when idle, else { name, confirm(), cancel() }.
     this.exclusiveAction = null;
 
+    // "N" toggle (when no "B" chord pending): clicking on top of a block always builds instead of selecting it.
+    this.forceBuildEnabled = false;
+
     // "H" toggle: hovering an object shows the active tool's gizmo without clicking to select first.
     this.hoverPreviewEnabled = false;
     this.hoverPreviewObject = null; // object currently gizmo-attached via hover only, not a real selection
@@ -155,14 +158,16 @@ class LevelEditor {
     else if (this.isMultiselectSelectionStage()) this.multiselectPointerUp(e);
     else if (this.exclusiveAction?.name === 'fast-build') this.fastBuildPointerUp(e);
     else if (this.exclusiveAction?.name === 'thin-build') this.thinBuildPointerUp(e);
+    else if (this.exclusiveAction?.name === 'cut-out') this.cutOutPointerUp(e);
     this.updateRender();
   }
 
-  // Whether an editor mode (drag-move, fast/thin build, multiselect marquee/refine) suppresses vanilla clicking; transform stage is not suppressed.
+  // Whether an editor mode (drag-move, fast/thin build, multiselect marquee/refine, cut-out) suppresses vanilla clicking; transform stage is not suppressed.
   isVanillaClickingSuppressed() {
     return this.dragMove.enabled
       || this.exclusiveAction?.name === 'fast-build'
       || this.exclusiveAction?.name === 'thin-build'
+      || this.exclusiveAction?.name === 'cut-out'
       || this.isMultiselectSelectionStage();
   }
 
@@ -965,7 +970,7 @@ class LevelEditor {
       // Check if object is not selected
       if (app.selectedObject == null || target) {
         // Select a new object on start click
-        if (target) {
+        if (target && this.forceBuildEnabled == false) {
           // Copy selected object color to target color
           if (e.shiftKey === true) {
             // During a group transform, copy the clicked block's color onto every selected block (never the control block).
@@ -1044,6 +1049,16 @@ class LevelEditor {
 
     // Reset mouse mode after quick erase
     if (e.button == 2) app.mouse.mode = app.mouse.prevMode;
+  }
+
+  // Deselect the currently selected block, equivalent to clicking on the void.
+  deselectCurrentObject() {
+    if (this.canPerformEditorAction() == false) return;
+    if (app.selectedObject == null) return;
+
+    app.level.deselectLevel();
+    this.detachControls();
+    window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
   eraseTarget(e) {
@@ -1126,13 +1141,132 @@ class LevelEditor {
     }
   }
 
-  // "N" only acts as the second half of a pending "B,N" chord (flip YZ); alone it's reserved for item #10 (force build).
+  // "N": completes a pending "B,N" chord (flip YZ); alone, toggles force-build mode.
   handleChordN() {
     if (this.chordPending === 'B') {
       this.chordPending = null;
       window.dispatchEvent(new CustomEvent('flipChordCleared'));
       this.flipSelection('yz');
     }
+    else {
+      this.forceBuildEnabled = !this.forceBuildEnabled;
+      window.dispatchEvent(new CustomEvent(this.forceBuildEnabled ? 'forceBuildEnabled' : 'forceBuildDisabled'));
+    }
+  }
+
+  // "/" arms cut-out mode; requires a block already selected as the cut target.
+  enterCutOutMode() {
+    if (app.selectedObject == null) return;
+    if (this.canPerformEditorAction() == false) return;
+
+    var action = this.startExclusiveAction('cut-out');
+    action.target = app.selectedObject;
+    app.level.deselectLevel();
+    this.detachControls();
+    app.selectedObject = null;
+    window.dispatchEvent(new CustomEvent('setSelectedObject'));
+  }
+
+  // Cutter click while cut-out is armed: performs the cut immediately (single click, no confirm step).
+  cutOutPointerUp(e) {
+    e.cutOutHandled = true;
+    var action = this.exclusiveAction;
+    var cutter = app.mouse.clickObject(e);
+    if (cutter == null || cutter === action.target) {
+      this.cancelAction();
+      return;
+    }
+    this.performCutOut(action.target, cutter);
+    this.endExclusiveAction();
+  }
+
+  // 2D rotated-footprint subtraction: replaces `target` (A) with up to 4 pieces covering its
+  // footprint minus the bounding box (in A's local frame) of `cutter` (B); both A and B are deleted.
+  performCutOut(target, cutter) {
+    // The algorithm is 2D-only; any tilt on either block (x/y rotation) can't be handled
+    if (target.rotation.x !== 0 || target.rotation.y !== 0 || cutter.rotation.x !== 0 || cutter.rotation.y !== 0) {
+      this.showCutOutError();
+      return;
+    }
+
+    var EPS = 0.01;
+    var az = target.rotation.z;
+    var cos = Math.cos(az), sin = Math.sin(az);
+
+    // Rotates a local-frame vector (lx, ly) by `az` into world space (forward rotation)
+    var rotateFwd = (lx, ly) => ({ x: cos * lx - sin * ly, y: sin * lx + cos * ly });
+    // Rotates a world-space offset back into A's local frame (inverse rotation)
+    var rotateInv = (wx, wy) => ({ x: cos * wx + sin * wy, y: -sin * wx + cos * wy });
+
+    // B's 4 corners in world space
+    var bcos = Math.cos(cutter.rotation.z), bsin = Math.sin(cutter.rotation.z);
+    var hx = cutter.scale.x / 2, hy = cutter.scale.y / 2;
+    var corners = [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]].map(([lx, ly]) => ({
+      x: cutter.position.x + (bcos * lx - bsin * ly),
+      y: cutter.position.y + (bsin * lx + bcos * ly)
+    }));
+
+    // Transform B's corners into A's local frame and take their bounds -> block C (abstract, never instantiated)
+    var cMinX = Infinity, cMaxX = -Infinity, cMinY = Infinity, cMaxY = -Infinity;
+    corners.forEach(corner => {
+      var rel = rotateInv(corner.x - target.position.x, corner.y - target.position.y);
+      cMinX = Math.min(cMinX, rel.x); cMaxX = Math.max(cMaxX, rel.x);
+      cMinY = Math.min(cMinY, rel.y); cMaxY = Math.max(cMaxY, rel.y);
+    });
+
+    var aHalfX = target.scale.x / 2, aHalfY = target.scale.y / 2;
+
+    // C must be strictly smaller than A on both axes, and must overlap A
+    var smallerThanA = (cMaxX - cMinX) < target.scale.x && (cMaxY - cMinY) < target.scale.y;
+    var overlapsA = cMinX < aHalfX && cMaxX > -aHalfX && cMinY < aHalfY && cMaxY > -aHalfY;
+    if (smallerThanA == false || overlapsA == false) {
+      this.showCutOutError();
+      return;
+    }
+
+    // Clip C to A's bounds
+    var clampedMinX = Math.max(cMinX, -aHalfX);
+    var clampedMaxX = Math.min(cMaxX, aHalfX);
+    var clampedMinY = Math.max(cMinY, -aHalfY);
+    var clampedMaxY = Math.min(cMaxY, aHalfY);
+
+    // One rect per edge of A that clipped-C doesn't reach (rects can overlap at corners - intentional)
+    var localRects = [];
+    if (clampedMinX > -aHalfX + EPS) localRects.push({ x0: -aHalfX, x1: clampedMinX, y0: -aHalfY, y1: aHalfY }); // Left
+    if (clampedMaxX < aHalfX - EPS) localRects.push({ x0: clampedMaxX, x1: aHalfX, y0: -aHalfY, y1: aHalfY }); // Right
+    if (clampedMinY > -aHalfY + EPS) localRects.push({ x0: -aHalfX, x1: aHalfX, y0: -aHalfY, y1: clampedMinY }); // Bottom
+    if (clampedMaxY < aHalfY - EPS) localRects.push({ x0: -aHalfX, x1: aHalfX, y0: clampedMaxY, y1: aHalfY }); // Top
+
+    var objectData = target.toJSON();
+    localRects.forEach(rect => {
+      var localCenter = { x: (rect.x0 + rect.x1) / 2, y: (rect.y0 + rect.y1) / 2 };
+      var worldCenter = rotateFwd(localCenter.x, localCenter.y);
+      var piece = app.level.entityFactory.createObject(objectData.class);
+      var pieceData = {
+        ...objectData,
+        position: { x: target.position.x + worldCenter.x, y: target.position.y + worldCenter.y, z: objectData.position.z },
+        rotation: { x: objectData.rotation.x, y: objectData.rotation.y, z: az },
+        scale: { x: rect.x1 - rect.x0, y: rect.y1 - rect.y0, z: objectData.scale.z }
+      };
+      app.level.setObjectProperties(piece, pieceData);
+      app.level.addObject(piece);
+    });
+
+    app.level.removeObject(target, true); // Also deselects
+    app.level.removeObject(cutter, true); // The cutter is consumed by the cut too
+    app.levelHistory.save('Cut out block');
+  }
+
+  // Shared error popup for cut-out validation failures: no history entry, no level changes.
+  showCutOutError() {
+    window.dispatchEvent(new CustomEvent('openPopup', {
+      detail: {
+        text: 'popup.text.invalid_cut_out',
+        inputs: [
+          { value: 'popup.button.close', type: 'button' }
+        ]
+      }
+    }));
   }
 
   // "B,B"/"B,N": flip the selection across its own XZ/YZ plane; never falls back to app.selectedObject during multiselect since it's stale once M is active.
@@ -1280,6 +1414,37 @@ class LevelEditor {
   // Called from the level-editor UI's "current Z" textbox; new blocks spawn here, and "0" resets to here.
   setCurrentZ(value) {
     this.currentZ = value;
+  }
+
+  // "[" resets camera Z + rotation to default, relative to the current Z-plane (see keybinds.md "Current Z").
+  // Uses controlsOrbit.reset() (same mechanism as the "Restart level" rewind) instead of raw camera writes,
+  // since OrbitControls recomputes the camera quaternion from its own internal state every frame and would
+  // otherwise silently fight/overwrite a direct camera.rotation.set() (causing a black-screen desync).
+  resetCameraZRotation() {
+    var targetX = this.controlsOrbit.target.x;
+    var targetY = this.controlsOrbit.target.y;
+    this.controlsOrbit.reset();
+    this.controlsOrbit.target.x = targetX;
+    this.controlsOrbit.target.y = targetY;
+    app.camera.position.x = targetX;
+    app.camera.position.y = targetY;
+    app.camera.position.z += this.currentZ;
+    this.controlsOrbit.update();
+    app.camera.updateMatrixWorld();
+    this.updateRender();
+  }
+
+  // "]" popup: type an exact camera X or Y directly.
+  setCameraX(value) {
+    app.camera.position.x = parseFloat(value) || 0;
+    app.camera.updateMatrixWorld();
+    this.updateRender();
+  }
+
+  setCameraY(value) {
+    app.camera.position.y = parseFloat(value) || 0;
+    app.camera.updateMatrixWorld();
+    this.updateRender();
   }
 
   updateSelectedObject() {

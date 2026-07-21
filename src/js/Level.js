@@ -8,6 +8,7 @@ class Level extends Group {
     super();
     this.name = this.defaultName = 'My Level';
     this.theme = this.defaultTheme = 'classic';
+    this.defaultBlockColor = null;
     this.entityFactory = new EntityFactory();
     this.publishedFileId = null; // Reserved for Steam itemIds
     this.zoom = undefined;
@@ -45,6 +46,7 @@ class Level extends Group {
     var length = this.children.length;
     this.name = this.defaultName;
     this.theme = this.defaultTheme;
+    this.defaultBlockColor = null;
     this.zoom = undefined;
     app.player.removeRope();
     for (var i=0; i < length; i++) {
@@ -126,6 +128,7 @@ class Level extends Group {
     var levelJSON = {};
     levelJSON.name = this.name;
     levelJSON.theme = this.theme;
+    levelJSON.defaultBlockColor = this.defaultBlockColor;
     levelJSON.description = this.description;
     levelJSON.zoom = this.zoom;
     levelJSON.version = app.version;
@@ -150,6 +153,7 @@ class Level extends Group {
   importFromJSON(levelData) {
     this.name = levelData.name;
     this.theme = levelData.theme;
+    this.defaultBlockColor = levelData.defaultBlockColor || null;
     this.description = levelData.description;
     this.zoom = levelData.zoom;
 
