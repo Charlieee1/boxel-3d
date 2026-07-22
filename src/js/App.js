@@ -85,8 +85,10 @@ class App {
   }
 
   async init(canvas, callback = function(){}) {
-    // Set version
-    fetch('./manifest.json')
+    // Set version - deliberately separate from manifest.json's own version field (which browser
+    // extension stores etc. require and manage independently) so the displayed/saved version never
+    // silently follows the wrong file (see versioning.md).
+    fetch('./json/version.json')
       .then(response => response.json())
       .then(data => this.version = data.version);
 

@@ -9,8 +9,7 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
-v2.9.2-m1.1.0
-Level Editor:
+v2.9.3-m1.1.0
 - Added thin fast build mode
 - Added textbox to change default building plane
 - Added hover gizmo mode
@@ -26,7 +25,6 @@ Level Editor:
 - Border around power block icon removed
 - Added rotation around pivot
 - Added temporary player start positions
-Other:
 - Added new settings tab
 
 v2.9.3

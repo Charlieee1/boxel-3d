@@ -6,14 +6,12 @@
 
   // Initialize attributes
   const util = new Utility();
-  var manifest = ref();
   var version = ref();
   var message = ref('You are currently using the old UI');
 
   async function updateVersion() {
-    var response = await fetch('./manifest.json');
+    var response = await fetch('./json/version.json');
     var json = await response.json();
-    manifest.value = json;
     version.value = json.version;
   }
 
