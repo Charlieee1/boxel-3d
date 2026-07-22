@@ -1,5 +1,5 @@
 import { Group } from 'three';
-import { World } from 'matter-js';
+import { Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
 
@@ -8,6 +8,7 @@ class Level extends Group {
     super();
     this.name = this.defaultName = 'My Level';
     this.theme = this.defaultTheme = 'classic';
+    this.defaultBlockColor = null;
     this.entityFactory = new EntityFactory();
     this.publishedFileId = null; // Reserved for Steam itemIds
     this.zoom = undefined;
@@ -45,12 +46,101 @@ class Level extends Group {
     var length = this.children.length;
     this.name = this.defaultName;
     this.theme = this.defaultTheme;
+    this.defaultBlockColor = null;
     this.zoom = undefined;
     app.player.removeRope();
+    // Clear the session-only "Set as start position" playtest override - never persisted, cleared on exit/level-switch.
+    if (app.levelEditor) {
+      app.levelEditor.tempSpawnPosition = null;
+      app.levelEditor.tempSpawnRotation = null;
+    }
     for (var i=0; i < length; i++) {
       var child = this.children[0];
       this.removeObject(child, true);
     }
+  }
+
+  // Attempts to link exactly one pair of blocks whose nearest ends coincide (within 1e-6, float-rounding
+  // tolerance) - creates a Matter Constraint (added to app.engine.world) and returns { constraint, endIndexA,
+  // endIndexB }, or null if no ends coincide. endIndexA/endIndexB is the index (0 or 1) into that block's own
+  // getBlockEndCandidates().locals that was used for the link - i.e. which local end actually participated -
+  // or null if that block has no real end-centres (squarish/anchor block, linked via its plain centre instead).
+  // Purely transient: this is a one-time level-authoring aid (see LevelEditor.confirmChain), not a
+  // persistent feature - the caller is responsible for removing the constraint once the settle simulation
+  // it was created for is done, and for baking the settled result into the blocks' static positions.
+  linkBlockPair(a, b) {
+    // Matter's body is purely 2D (x/y/angle) - a tilted (x/y-rotated) block's local X/Y axes no longer match the
+    // physics plane, so neither its end-centre math nor a 2D constraint can represent it correctly (same restriction as cut-out).
+    if (a.rotation.x !== 0 || a.rotation.y !== 0 || b.rotation.x !== 0 || b.rotation.y !== 0) return null;
+
+    // Only z==0 blocks are ever added to engine.world (see addObject/updateObjectPhysicsState) - a constraint
+    // referencing a body that was never added to the world is never gravity/velocity-integrated by Engine.update,
+    // so it would silently do nothing (same reason Player.addRope checks this before adding a rope joint).
+    if (a.position.z !== 0 || b.position.z !== 0) return null;
+
+    var endsA = app.util.getBlockEndCandidates(a), endsB = app.util.getBlockEndCandidates(b);
+    var bestFa = -1, bestFb = -1, bestDist = 1e-6;
+    for (var fa = 0; fa < endsA.points.length; fa++) {
+      for (var fb = 0; fb < endsB.points.length; fb++) {
+        var d = endsA.points[fa].distanceTo(endsB.points[fb]);
+        if (d < bestDist) { bestDist = d; bestFa = fa; bestFb = fb; }
+      }
+    }
+    if (bestFa === -1) return null; // no coincident ends between this pair
+
+    // Matter rotates pointA/pointB by the body's angle DELTA since constraint creation, not its absolute angle
+    // (see Constraint.solve) - so the offset must be the current WORLD end-centre relative to the body, not the
+    // canonical unrotated local (which silently drops the block's own rotation at link time, if any, before settling).
+    var worldA = endsA.points[bestFa], worldB = endsB.points[bestFb];
+    var offsetA = { x: worldA.x - a.position.x, y: -(worldA.y - a.position.y) };
+    var offsetB = { x: worldB.x - b.position.x, y: -(worldB.y - b.position.y) };
+
+    // length is left unset so Matter derives it from the points' actual (near-zero) initial distance, same as
+    // Rope.js's joints - avoids hardcoding a literal 0 target length that doesn't quite match the true (within-1e-6) initial gap.
+    var constraint = Constraint.create({
+      bodyA: a.body, bodyB: b.body,
+      pointA: offsetA,
+      pointB: offsetB,
+      stiffness: 1
+    });
+    World.add(app.engine.world, constraint);
+    return {
+      constraint,
+      endIndexA: endsA.locals.length > 1 ? bestFa : null,
+      endIndexB: endsB.locals.length > 1 ? bestFb : null
+    };
+  }
+
+  // Builds Matter constraints for every coincident-end pair found WITHIN candidates (the confirmed "P" chain
+  // flow selection) - never scans the whole level. Returns { constraints, linkedEnds, linkPairs }: constraints is
+  // the array of created constraints, for the caller (LevelEditor.confirmChain) to remove from the world again
+  // once the one-time settle simulation they were created for finishes; linkedEnds is a Map from each
+  // candidate block to a Set of its own local end indices (0 and/or 1, see getBlockEndCandidates) that
+  // actually took part in a link - used by the baking step to know which of a block's ends (if any) need
+  // shortening to remove the end-centre overlap at each joint (see LevelEditor.finishChainSettle); linkPairs is
+  // the per-pair objA/objB/endIndexA/endIndexB detail behind linkedEnds, kept only for chain-bake debug logging.
+  buildChainLinksForCandidates(candidates) {
+    var constraints = [];
+    var linkedEnds = new Map();
+    var linkPairs = []; // per-pair objA/objB/endIndexA/endIndexB detail, kept only for chain-bake debug logging (see LevelEditor.logChainBakeDebugInfo)
+    var addLinkedEnd = (obj, index) => {
+      if (index == null) return;
+      if (!linkedEnds.has(obj)) linkedEnds.set(obj, new Set());
+      linkedEnds.get(obj).add(index);
+    };
+
+    for (var i = 0; i < candidates.length; i++) {
+      for (var j = i + 1; j < candidates.length; j++) {
+        var link = this.linkBlockPair(candidates[i], candidates[j]);
+        if (link) {
+          constraints.push(link.constraint);
+          addLinkedEnd(candidates[i], link.endIndexA);
+          addLinkedEnd(candidates[j], link.endIndexB);
+          linkPairs.push({ objA: candidates[i].uuid, objB: candidates[j].uuid, endIndexA: link.endIndexA, endIndexB: link.endIndexB });
+        }
+      }
+    }
+    return { constraints, linkedEnds, linkPairs };
   }
 
   removeParticles() {
@@ -126,6 +216,7 @@ class Level extends Group {
     var levelJSON = {};
     levelJSON.name = this.name;
     levelJSON.theme = this.theme;
+    levelJSON.defaultBlockColor = this.defaultBlockColor;
     levelJSON.description = this.description;
     levelJSON.zoom = this.zoom;
     levelJSON.version = app.version;
@@ -139,6 +230,7 @@ class Level extends Group {
         levelJSON.children.push(objectData);
       }
     }
+
     return levelJSON;
   }
 
@@ -150,6 +242,7 @@ class Level extends Group {
   importFromJSON(levelData) {
     this.name = levelData.name;
     this.theme = levelData.theme;
+    this.defaultBlockColor = levelData.defaultBlockColor || null;
     this.description = levelData.description;
     this.zoom = levelData.zoom;
 
@@ -175,19 +268,22 @@ class Level extends Group {
     }
   }
 
-  retryLevel(keepCheckpoint = false) {
+  retryLevel(keepCheckpoint = false, respawnToTemp = true) {
     app.updateGravity();
     app.play = true;
     app.level.removeParticles();
     app.player.cancelRestart();
     app.resetScene();
     window.dispatchEvent(new CustomEvent('closePopup'));
-    
+
     // Remove checkpoint, or respawn to checkpoint
     if (keepCheckpoint == false || app.player.checkpoint == null) {
       app.timer.reset();
       app.timer.start();
       app.player.removeCheckpoint();
+      // resetScene() above reset the player to its real saved position - re-apply the level editor's
+      // temp spawn override (if any) so "R" mid-playtest respects it too (see LevelEditor.applyTempSpawn).
+      if (respawnToTemp && app.levelEditor) app.levelEditor.applyTempSpawn();
     }
     else app.player.respawn(true);
   }

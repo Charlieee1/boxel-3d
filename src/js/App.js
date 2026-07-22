@@ -53,7 +53,7 @@ class App {
     this.scene.add(this.level);
     
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 2000);
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000);
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
@@ -85,8 +85,10 @@ class App {
   }
 
   async init(canvas, callback = function(){}) {
-    // Set version
-    fetch('./manifest.json')
+    // Set version - deliberately separate from manifest.json's own version field (which browser
+    // extension stores etc. require and manage independently) so the displayed/saved version never
+    // silently follows the wrong file (see versioning.md).
+    fetch('./json/version.json')
       .then(response => response.json())
       .then(data => this.version = data.version);
 
@@ -171,6 +173,7 @@ class App {
       this.timer.render();
       
       // Update game objects
+      this.player.updateMatrixWorld();
       this.player.renderRope(alpha);
       this.background.update(delta, alpha, app.motion == false);
       this.background.updateMatrixWorld();
@@ -405,6 +408,8 @@ class App {
       app.timer.reset();
       app.level.clearLevel();
       app.level.importFromJSON(options.json);
+      // Apply level's custom default color override, if set (loaded above by importFromJSON)
+      if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
       app.level.publishedFileId = options.publishedFileId; // Steam level ID
       app.saveOrbitState();
       app.background.visible = true;

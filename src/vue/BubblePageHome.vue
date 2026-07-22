@@ -10,7 +10,6 @@
   const util = new Utility();
   const i18n = useI18n({ useScope: 'global' });
   var emit = defineEmits(['setPage']);
-  var manifest = ref();
   var version = ref();
   var versionButtonVisible = ref(app.network.isOnline() == false);
   var messageIndex = getRandomMessageIndex();
@@ -76,9 +75,8 @@
   }
 
   async function updateVersion() {
-    var response = await fetch('./manifest.json');
+    var response = await fetch('./json/version.json');
     var json = await response.json();
-    manifest.value = json;
     version.value = 'v' + json.version;
   }
 

@@ -355,7 +355,7 @@
 
       &.object-options {
         background-color: #252526;
-        overflow-y: auto;
+        overflow: visible; // No auto-scroll clip here - it'd cut off popouts like the friction slider
       }
 
       .item {
@@ -911,6 +911,72 @@
 
     > * {
       pointer-events: all;
+    }
+
+    .text-overlay {
+      position: absolute;
+      top: 48px;
+      right: 0;
+      margin: 4px 4px 0 0;
+      padding: 0;
+      font-family: 'Comfortaa-Bold';
+      font-size: 12px;
+      color: #fff;
+      background-color: rgba(0, 0, 0, 0.5);
+      white-space: pre-line;
+    }
+
+    .block-type-picker {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 85vh;
+      height: 85vh;
+      z-index: 2;
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+        gap: 8px;
+        width: 100%;
+        height: 100%;
+      }
+
+      .tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 8px;
+        box-sizing: border-box;
+        border-radius: 4px;
+
+        &.filled {
+          background-color: rgba(20, 20, 20, 0.6);
+        }
+
+        &.hovered img {
+          filter: invert(0%);
+        }
+
+        img {
+          max-width: 40%;
+          max-height: 40%;
+          filter: invert(50%);
+          pointer-events: none;
+        }
+
+        span {
+          font-family: 'Comfortaa-Bold';
+          font-size: 15px;
+          color: #fff;
+          margin-top: 8px;
+          text-align: center;
+          pointer-events: none;
+        }
+      }
     }
   }
 

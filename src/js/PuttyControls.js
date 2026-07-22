@@ -43,6 +43,7 @@ class PuttyControls extends Controls {
     super(camera, domElement);
     this.camera = camera;
     this.domElement = domElement;
+    this.activePoint = null; // pointA or pointB, whichever is actively being dragged (set in onDragStart, read by LevelEditor's vertex snap)
 
     // Add reactive properties
     const defineProperty = (name, value) => {
@@ -257,16 +258,22 @@ class PuttyControls extends Controls {
 
   onDragStart = event => {
     if (!this.object) return;
-    
+
+    // Track which endpoint is being dragged, for external (vertex snap) correction after each drag frame.
+    this.activePoint = event.object;
+
     // Store the initial line direction and anchor point for lockRotation
     _vectorLineDirection.subVectors(this.pointB.position, this.pointA.position).normalize();
     _vectorLineAnchor.copy((event.object === this.pointA ? this.pointB : this.pointA).position);
     _vectorScale.copy(this.object.scale);
     _vectorOffset.subVectors(this.pointB.position, this.pointA.position);
-    
+
     // Bubble up event
     this.dispatchEvent(event);
     this.dispatchEvent(_changeEvent);
+
+    // DragControls sets the canvas cursor to "grabbing" on drag start - keep the normal cursor instead.
+    queueMicrotask(() => { if (this.domElement) this.domElement.style.cursor = ''; });
   }
 
   onDrag = event => {
@@ -324,6 +331,9 @@ class PuttyControls extends Controls {
     // Bubble up event
     this.dispatchEvent(event);
     this.dispatchEvent(_changeEvent);
+
+    // DragControls resets the cursor to "pointer" (not the normal cursor) on drag end - override it.
+    queueMicrotask(() => { if (this.domElement) this.domElement.style.cursor = ''; });
   }
 
   onHoverOff = event => {
@@ -339,7 +349,7 @@ class PuttyControls extends Controls {
 
     // DragControls sets the canvas cursor to "pointer" on hover (right after
     // this dispatch, on the hover transition only). Keep the normal cursor
-    // instead — deferred to a microtask so it runs after that synchronous write.
+    // instead - deferred to a microtask so it runs after that synchronous write.
     queueMicrotask(() => { if (this.domElement) this.domElement.style.cursor = ''; });
 
     // Bubble up event

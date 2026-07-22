@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "Boxel 3D Modded",
   "description": "Boxel 3D is a speedrunning game packed with challenging levels, custom skins, online multiplayer, and a creative level editor.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "action": {
     "default_popup": "index.html",
-    "default_title": "Boxel 3D",
+    "default_title": "Boxel 3D Modded",
     "default_icon": {
       "16": "png/icon16.png",
       "48": "png/icon48.png"

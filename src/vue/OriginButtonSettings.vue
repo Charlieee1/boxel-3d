@@ -21,6 +21,11 @@
           e.target.title = snap;
           updateSettings('snap', snap);
         }},
+        { label: 'Autosave', name: 'autosave', type: 'range', min: 0, max: 20, step: 1, value: settings.autosave, callback: function(e) {
+          var autosave = Math.round(Number(e.target.value));
+          e.target.title = autosave == 0 ? 'Off' : (autosave + ' min');
+          updateSettings('autosave', autosave);
+        }},
       );
     }
     else if (app.state == 'campaign') {

@@ -1,11 +1,4 @@
-/*
-  Executes synchronous functions at a recurring frequency. The first
-  or "base" loop determines the shared alpha value for all sibling functions.
-
-  Tip: Add your physics loop first (ex: 1000ms / 30fps = ~33ms), then add the
-  rendering loop without any delay. Use the alpha value to interpolate
-  rendered objects during your physics engine delay.
-*/
+// Executes synchronous functions at a recurring frequency; the "base" loop's alpha is shared with sibling loops for interpolation.
 
 class Interval {
   constructor() {
@@ -78,8 +71,8 @@ class Interval {
     const cappedDelta = Math.min(threadDelta, maxDelta);
     this.threadTimestamp = timestamp;
 
-    // Loop through array of loops (descending order)
-    for (let i = this.loops.length - 1; i >= 0; i--) {
+    // Loop through array of loops
+    for (let i = 0; i < this.loops.length; i++) {
       // Skip loop if it is paused
       if (this.loops[i].paused === true) continue;
       
