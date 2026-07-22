@@ -53,7 +53,7 @@ class App {
     this.scene.add(this.level);
     
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 2000);
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000);
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
@@ -406,6 +406,8 @@ class App {
       app.timer.reset();
       app.level.clearLevel();
       app.level.importFromJSON(options.json);
+      // Apply level's custom default color override, if set (loaded above by importFromJSON)
+      if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
       app.level.publishedFileId = options.publishedFileId; // Steam level ID
       app.saveOrbitState();
       app.background.visible = true;

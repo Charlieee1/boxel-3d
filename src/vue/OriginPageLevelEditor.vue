@@ -13,9 +13,217 @@
   const themeOptionsVisible = ref(false);
   const selectedMode = ref(app.levelEditor.controlsTransform.mode);
   const coordinates = ref('0, 0, 0');
+  const currentZ = ref(app.levelEditor.currentZ || 0); // "current Z": new blocks spawn here, "0" key resets to here
+  const defaultColor = ref(app.level.defaultBlockColor || app.level.getTheme(app.level.theme).color); // effective default new-block color
   const isClosed = ref(true); // Popup animation state
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
+  const textOverlay = ref();
+  const textOverlayRows = [];
+  const blockTypePickerVisible = ref(false);
+  const hoveredBlockType = ref(null);
+
+  // Populates the "A" block-type picker's 4x4 grid, matching the toolbar's object-type column; `null` = empty tile.
+  const BLOCK_TYPE_GRID = [
+    { type: 'cube', label: 'Cube', icon: 'cube.svg' },
+    { type: 'tip', label: 'Tip', icon: 'tip.svg' },
+    { type: 'bounce', label: 'Bounce', icon: 'bounce.svg' },
+    { type: 'checkpoint', label: 'Checkpoint', icon: 'checkpoint.svg' },
+    { type: 'spike', label: 'Spike', icon: 'spike.svg' },
+    { type: 'resize', label: 'Resize', icon: 'grow.svg' },
+    { type: 'direction', label: 'Direction', icon: 'direction.svg' },
+    { type: 'gravity', label: 'Gravity', icon: 'gravity.svg' },
+    { type: 'grapple', label: 'Grapple', icon: 'grapple.svg' },
+    { type: 'finish', label: 'Finish', icon: 'finish.svg' },
+    { type: 'reset', label: 'Reset', icon: 'reset.svg' },
+    { type: 'control', label: 'Control', icon: 'control.svg' },
+    { type: 'power', label: 'Power', icon: 'power.svg' },
+    { type: 'teleport', label: 'Teleport', icon: 'teleport.svg' },
+    null,
+    null
+  ];
+
+  // Blocking editor states shown in the overlay; key-held submodes are omitted
+  const EXCLUSIVE_ACTION_LABELS = {
+    'multiselect': 'Multiselect',
+    'fast-build': 'Fast Build',
+    'thin-build': 'Thin Build',
+    'cut-out': 'Cut Out',
+    'set-pivot': 'Set Pivot'
+  };
+
+  // Stages shown as a second row layered above a blocking state's base label
+  const EXCLUSIVE_ACTION_STAGE_LABELS = {
+    'fast-build': { create: 'Create', scale: 'Scale', rotate: 'Rotate', move: 'Move' },
+    // "anchor" only occurs for "P" chain, which reuses this same 'multiselect' name/staging (see LevelEditor.armChainMode()).
+    'multiselect': { marquee: 'Box Select', refine: 'Refine', transform: 'Transform', anchor: 'Mark Anchors' }
+  };
+
+  // Third row shown during multiselect transform + scale mode, reflecting the current scale-lock cycle
+  const SCALE_LOCK_LABELS = {
+    'free': 'Scale (Unlocked)',
+    'xy-locked': 'Scale (Locked XY)',
+    'xyz-locked': 'Scale (Locked XYZ)'
+  };
+
+  let currentActionLabel = null; // exact text of the currently shown exclusive-action row, for precise removal
+  let stageRowActive = false; // whether the top (stage) row is currently shown
+  let currentStageLabel = null; // exact text of the currently shown stage row, for precise removal
+  let scaleLockRowActive = false; // whether the scale-lock row is currently shown
+  let currentScaleLockLabel = null; // exact text of the currently shown scale-lock row, for precise removal
+  let flipChordRowActive = false; // whether the "Flip (Pending)" row is currently shown
+
+  // Arms/clears the "B,_" flip chord row; kept separate from the addRow/removeRow stack since it can start/end independently of any other row.
+  function onFlipChordArmed() {
+    if (flipChordRowActive) return;
+    addRow('Flip (Pending)');
+    flipChordRowActive = true;
+  }
+
+  function onFlipChordCleared() {
+    if (!flipChordRowActive) return;
+    removeRowByText('Flip (Pending)');
+    flipChordRowActive = false;
+  }
+
+  // Shows/hides the persistent "Force Build" row; independent of the addRow/removeRow LIFO stack, like the flip-chord row.
+  let forceBuildRowActive = false;
+
+  function onForceBuildEnabled() {
+    if (forceBuildRowActive) return;
+    addRow('Force Build');
+    forceBuildRowActive = true;
+  }
+
+  function onForceBuildDisabled() {
+    if (!forceBuildRowActive) return;
+    removeRowByText('Force Build');
+    forceBuildRowActive = false;
+  }
+
+  // Shows/hides the persistent "Vertex Snap"/"Centre Snap" row (","), same independent-of-the-stack mechanism as Force Build.
+  let snapModeRowActive = false;
+  let currentSnapModeLabel = null;
+
+  function onSnapModeChanged(e) {
+    if (snapModeRowActive) {
+      removeRowByText(currentSnapModeLabel);
+      snapModeRowActive = false;
+      currentSnapModeLabel = null;
+    }
+    var label = e.detail.mode === 'vertex' ? 'Vertex Snap' : e.detail.mode === 'centre' ? 'Centre Snap' : null;
+    if (label) {
+      addRow(label);
+      currentSnapModeLabel = label;
+      snapModeRowActive = true;
+    }
+  }
+
+  // Shows/hides/refreshes the scale-lock row based on current mode + multiselect transform state
+  function updateScaleLockRow() {
+    if (scaleLockRowActive) {
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
+      scaleLockRowActive = false;
+    }
+    if (app.levelEditor.isMultiselectTransform() && selectedMode.value === 'scale') {
+      var mode = app.levelEditor.exclusiveAction?.scaleMode || 'free';
+      currentScaleLockLabel = SCALE_LOCK_LABELS[mode];
+      addRow(currentScaleLockLabel);
+      scaleLockRowActive = true;
+    }
+  }
+
+  function onLevelEditorActionStarted(e) {
+    if (e.detail.name === 'select-block-type') blockTypePickerVisible.value = true;
+    // "P" chain reuses the 'multiselect' action name/staging (purpose 'chain') - show "Chain" instead of "Multiselect".
+    const label = (e.detail.name === 'multiselect' && e.detail.purpose === 'chain') ? 'Chain' : EXCLUSIVE_ACTION_LABELS[e.detail.name];
+    if (label) {
+      addRow(label);
+      currentActionLabel = label;
+    }
+  }
+
+  function onLevelEditorActionEnded(e) {
+    if (e.detail.name === 'select-block-type') {
+      blockTypePickerVisible.value = false;
+      hoveredBlockType.value = null;
+    }
+    if (!EXCLUSIVE_ACTION_LABELS[e.detail.name]) return;
+    if (scaleLockRowActive) {
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
+      scaleLockRowActive = false;
+    }
+    if (stageRowActive) {
+      removeRowByText(currentStageLabel);
+      currentStageLabel = null;
+      stageRowActive = false;
+    }
+    // levelEditorActionEnded's detail carries only `name` (not `purpose`), so use the label tracked at start time rather than recomputing it.
+    if (currentActionLabel) {
+      removeRowByText(currentActionLabel);
+      currentActionLabel = null;
+    }
+  }
+
+  // Mouse hover on a picker tile: updates the highlight and drives the live type-preview in LevelEditor.js.
+  function hoverBlockType(type) {
+    hoveredBlockType.value = type;
+    if (type != null) app.levelEditor.hoverBlockType(type);
+    else app.levelEditor.clearHoveredBlockType();
+  }
+
+  function onLevelEditorActionStageChanged(e) {
+    const stageLabel = EXCLUSIVE_ACTION_STAGE_LABELS[e.detail.name]?.[e.detail.stage];
+    if (!stageLabel) return;
+    if (scaleLockRowActive) {
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
+      scaleLockRowActive = false;
+    }
+    if (stageRowActive) removeRowByText(currentStageLabel);
+    addRow(stageLabel);
+    currentStageLabel = stageLabel;
+    stageRowActive = true;
+    updateScaleLockRow();
+  }
+
+  function addRow(text) {
+    if (typeof text !== 'string' || text.length === 0) {
+      console.error('addRow: text must be a non-empty string');
+      return;
+    }
+    if (!textOverlay.value) {
+      console.error('addRow: text overlay is not mounted');
+      return;
+    }
+
+    textOverlayRows.push(text);
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
+
+  function removeRow() {
+    if (textOverlayRows.length === 0) {
+      console.error('removeRow: no rows to remove');
+      return;
+    }
+    if (!textOverlay.value) {
+      console.error('removeRow: text overlay is not mounted');
+      return;
+    }
+
+    textOverlayRows.pop();
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
+
+  // Removes a specific row by its text instead of only the last one, so it can be cleared independently of the stack.
+  function removeRowByText(text) {
+    const index = textOverlayRows.lastIndexOf(text);
+    if (index === -1 || !textOverlay.value) return;
+    textOverlayRows.splice(index, 1);
+    textOverlay.value.textContent = textOverlayRows.join('\n');
+  }
 
   function addEventListeners() {
     window.addEventListener('exitLevel', resetBackground);
@@ -29,8 +237,17 @@
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
+    window.addEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
+    window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
+    window.addEventListener('flipChordArmed', onFlipChordArmed);
+    window.addEventListener('flipChordCleared', onFlipChordCleared);
+    window.addEventListener('themeSelected', onThemeSelected);
+    window.addEventListener('forceBuildEnabled', onForceBuildEnabled);
+    window.addEventListener('forceBuildDisabled', onForceBuildDisabled);
+    window.addEventListener('snapModeChanged', onSnapModeChanged);
   }
-  
+
   function removeEventListeners() {
     window.removeEventListener('exitLevel', resetBackground);
     window.removeEventListener('setSelectedObject', setSelectedObject);
@@ -42,6 +259,15 @@
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
+    window.removeEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
+    window.removeEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
+    window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
+    window.removeEventListener('flipChordArmed', onFlipChordArmed);
+    window.removeEventListener('flipChordCleared', onFlipChordCleared);
+    window.removeEventListener('themeSelected', onThemeSelected);
+    window.removeEventListener('forceBuildEnabled', onForceBuildEnabled);
+    window.removeEventListener('forceBuildDisabled', onForceBuildDisabled);
+    window.removeEventListener('snapModeChanged', onSnapModeChanged);
   }
 
   function popupOpened() {
@@ -74,6 +300,20 @@
     app.levelEditor.saveLevel();
   }
 
+  // Polls every 10s (not a derived setInterval delay) so changing the slider mid-session takes effect immediately.
+  let autosaveInterval = null;
+  let lastAutosaveTime = 0;
+
+  function checkAutosave() {
+    if (app.play == true) return; // Matches Ctrl+S, which is paused-only.
+    var minutes = app.storage.getSettings().autosave;
+    if (!minutes || minutes <= 0) return;
+    if (Date.now() - lastAutosaveTime >= minutes * 60000) {
+      lastAutosaveTime = Date.now();
+      saveLevel();
+    }
+  }
+
   function saveThumbnail() {
     app.pauseLevel();
     app.storage.screenshot({ width: 1280, height: 720, save: true });
@@ -86,19 +326,23 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
 
+    // Capture the old theme's default color first, so only blocks still matching it recolor
+    const oldTheme = app.level.getTheme(app.level.theme);
+
     // Store current theme settings
     const theme = app.level.getTheme(name);
     selectedTheme.value = name;
     app.background.setTheme(theme.model);
     app.level.entityFactory.color = theme.color;
+    if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
     app.level.theme = name;
-    
+
     // Recreate current level with new theme data
     const json = app.level.exportToJSON();
 
-    // Change each child color to theme color
+    // Only recolor children still matching the old theme's default; manually-set colors are preserved
     json.children.forEach(child => {
-      if (child.color) child.color = theme.color;
+      if (child.color && oldTheme && child.color === oldTheme.color) child.color = theme.color;
     });
 
     app.level.clearLevel();
@@ -126,6 +370,9 @@
   function pauseLevel() {
     objectTypeVisible.value = true;
     app.pauseLevel();
+    // Restore every object (including the player) to its real saved state - undoes playtest physics drift
+    // and any "Set as start position" temp spawn override, same reset retryLevel() uses to start a fresh run.
+    app.resetScene();
     app.level.deselectLevel();
     app.levelEditor.controlsOrbit.enabled = true;
     app.levelEditor.controlsOrbit.reset();
@@ -144,6 +391,8 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
+    // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
+    app.levelEditor.applyTempSpawn();
     app.startLevel();
   }
 
@@ -153,7 +402,7 @@
 
   function selectObjectType(e) {
     objectType.value = e.detail.type;
-    app.levelEditor.selectObjectType(e.detail.type, e.detail.checkNull);
+    app.levelEditor.selectObjectType(e.detail.type, e.detail.checkNull, e.detail.saveHistory);
   }
 
   function setSelectedObject(e) {
@@ -165,9 +414,15 @@
     app.levelEditor.toggleSelectedObjectStaticState();
   }
 
+  // Checkpoint property panel button: session-only playtest spawn override (see playCurrentLevel above).
+  function setTempSpawnFromCheckpoint() {
+    app.levelEditor.setTempSpawnFromCheckpoint(selectedObject.value);
+  }
+
   function setTransformMode(e) {
     selectedMode.value = e.detail;
     app.levelEditor.setMode(e.detail);
+    updateScaleLockRow();
   }
 
   function updateCoordinatesFromEvent(e) {
@@ -197,16 +452,33 @@
     }
   }
 
-  function toggleFriction(e) {
-    const friction = selectedObject.value.getFriction();
-    if (friction == 1) selectedObject.value.setFriction(0, true);
-    else selectedObject.value.setFriction(1, true);
+  // "Current Z" textbox: new blocks spawn here, and "0" resets the selection here (level-editor only, no effect on gameplay).
+  function updateCurrentZFromEvent(e) {
+    const value = parseInt(e.target.value) || 0;
+    currentZ.value = value;
+    app.levelEditor.setCurrentZ(value);
+  }
+
+  function updateFriction(e) {
+    selectedObject.value.setFriction(e.target.value);
     app.levelHistory.save('Updated object properties');
   }
 
   function updateColor(e) {
     selectedObject.value.setColors(e.target.value);
     app.levelHistory.save('Updated object properties');
+  }
+
+  // Toolbar swatch: sets the level's persisted default new-block color and refreshes the live runtime cache
+  function updateDefaultColor(e) {
+    app.level.defaultBlockColor = e.target.value;
+    app.level.entityFactory.color = e.target.value;
+    defaultColor.value = e.target.value;
+  }
+
+  // Keeps the default-color swatch synced when a theme switch changes the effective default
+  function onThemeSelected(e) {
+    defaultColor.value = app.level.defaultBlockColor || e.detail.color;
   }
 
   function changeText() {
@@ -217,6 +489,20 @@
         inputs: [
           { value: app.selectedObject.text, type: 'text', callback: updateText },
           { value: 'Cancel', type: 'button' },
+          { value: 'Close', type: 'button' }
+        ]
+      }
+    }));
+  }
+
+  // "]" popup: type an exact camera X/Y; each input applies immediately on change, no confirm step needed.
+  function openSetCameraPositionPopup() {
+    window.dispatchEvent(new CustomEvent('openPopup', {
+      detail: {
+        text: 'Set Camera Position',
+        inputs: [
+          { label: 'X', type: 'text', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
+          { label: 'Y', type: 'text', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
           { value: 'Close', type: 'button' }
         ]
       }
@@ -291,12 +577,13 @@
         }
       }
       else {
-        // While the select-block-type submode (A) is armed, the next block-type
-        // key picks an object type directly.
-        if (app.levelEditor.pickBlockType(e.code)) {
-          // consumed as a block-type pick
+        // Any key other than B/N invalidates a pending "B,_" chord immediately, so a stale wait never lingers.
+        if (e.code !== 'KeyB' && e.code !== 'KeyN' && app.levelEditor.chordPending !== null) {
+          app.levelEditor.chordPending = null;
+          window.dispatchEvent(new CustomEvent('flipChordCleared'));
         }
-        else if (e.code == 'Digit0') {
+
+        if (e.code == 'Digit0') {
           app.levelEditor.resetZAxis();
         }
         else if (e.code == 'Escape' || e.code == 'KeyE') {
@@ -323,6 +610,10 @@
           if (e.ctrlKey == true) {
             e.preventDefault();
             app.levelEditor.saveLevel();
+          }
+          else if (app.levelEditor.isMultiselectTransform() && app.levelEditor.selectedMode === 'scale') {
+            app.levelEditor.cycleMultiselectScaleMode();
+            updateScaleLockRow();
           }
           else setTransformMode({ detail: 'scale' });
         }
@@ -356,6 +647,43 @@
         else if (e.code == 'KeyM' && e.ctrlKey == false && e.metaKey == false) {
           app.levelEditor.toggleMultiselect();
         }
+        else if (e.code == 'KeyL' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleThinBuild();
+        }
+        else if (e.code == 'KeyH' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.toggleHoverPreview();
+        }
+        // Flip chord (B,B = XZ, B,N = YZ); repeat-guarded so held-key auto-repeat can't flood history.
+        else if (e.code == 'KeyB' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
+          app.levelEditor.handleChordB();
+        }
+        else if (e.code == 'KeyN' && e.ctrlKey == false && e.metaKey == false && e.repeat == false) {
+          if (e.shiftKey == true) {
+            app.levelEditor.deselectCurrentObject();
+          }
+          else {
+            app.levelEditor.handleChordN();
+          }
+        }
+        else if (e.code == 'BracketLeft') {
+          app.levelEditor.resetCameraZRotation();
+        }
+        else if (e.code == 'BracketRight') {
+          openSetCameraPositionPopup();
+        }
+        else if (e.code == 'Slash' && e.ctrlKey == false && e.metaKey == false) {
+          e.preventDefault();
+          app.levelEditor.enterCutOutMode();
+        }
+        else if (e.code == 'Comma' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.cycleSnapMode();
+        }
+        else if (e.code == 'Period' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.armCustomPivot();
+        }
+        else if (e.code == 'KeyP' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.armChainMode();
+        }
       }
     }
 
@@ -368,8 +696,8 @@
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = false;
     if (e.code === 'KeyQ') app.levelEditor.disableDragMove();
 
-    // Finish the select-block-type submode on key release.
-    if (app.levelEditor.exclusiveAction?.name === 'select-block-type' && app.levelEditor.exclusiveAction.pendingExit) {
+    // Releasing "A" commits the block-type picker's currently hovered tile.
+    if (e.code === 'KeyA' && app.levelEditor.exclusiveAction?.name === 'select-block-type') {
       app.levelEditor.exitSelectBlockTypeMode();
     }
 
@@ -388,6 +716,8 @@
     // Run function after being mounted (visible)
     app.canvas.classList.remove('hidden');
     addEventListeners();
+    lastAutosaveTime = Date.now();
+    autosaveInterval = setInterval(checkAutosave, 10000);
 
     // Dispatch ready event to listeners
     window.dispatchEvent(new CustomEvent('pageMounted', { detail: 'level-editor' }));
@@ -397,6 +727,7 @@
     // Run function after being unmounted (removed);
     app.canvas.classList.add('hidden');
     removeEventListeners();
+    clearInterval(autosaveInterval);
   });
 </script>
 
@@ -424,6 +755,12 @@
             </li>
           </ul>
         </a>
+        <div class="item">
+          <label>
+            <a title="Default block color"><img :src="'./svg/color.svg'"></a>
+            <input name="default-color" type="color" :value="defaultColor" @change="updateDefaultColor($event)">
+          </label>
+        </div>
         <a class="item" @click="undo" title="Undo edit (Ctrl + Z)"><img :src="'./svg/undo.svg'"></a>
         <a class="item" @click="redo" title="Redo edit (Ctrl + Shift + Z)"><img :src="'./svg/redo.svg'"></a>
         <a class="item" @click="rewind" title="Restart level"><img :src="'./svg/rewind.svg'"></a>
@@ -434,6 +771,13 @@
             v-model="coordinates"
             v-on:keyup.enter="$event.target.blur()"
             @change="updatePositionFromEvent($event)"
+          >
+        </a>
+        <a class="item auto" title="Current Z (new blocks spawn here; &quot;0&quot; resets selection here)">
+          <input class="current-z"
+            v-model="currentZ"
+            v-on:keyup.enter="$event.target.blur()"
+            @change="updateCurrentZFromEvent($event)"
           >
         </a>
         <OriginButtonSettings class="item last" />
@@ -462,8 +806,12 @@
         <a class="item" :class="{ selected: selectedMode == 'rotate'}" @click="keydown({ code: 'KeyR' });" title="Rotate (R)"><img :src="'./svg/rotate-clockwise.svg'"></a>
         <a class="item" :class="{ selected: selectedMode == 'putty'}" @click="keydown({ code: 'KeyF' });" title="Putty (F)"><img :src="'./svg/putty.svg'"></a>
         <a class="item" :class="{ selected: selectedObject.isStatic() }" @click="toggleSelectedObjectStaticState" title="Pin"><img :src="'./svg/pin.svg'"></a>
-        <a class="item" :class="{ disabled: selectedObject.isStatic() }" @click="toggleFriction" :title="`Friction (${ selectedObject.getFriction() })`"><img :src="'./svg/friction.svg'"></a>
+        <div class="item" :class="{ disabled: selectedObject.isStatic() }">
+          <a action="friction" title="Friction"><img :src="'./svg/friction.svg'"></a>
+          <div class="slider"><input name="friction" type="range" min="0" max="1" step="0.25" :value="selectedObject.getFriction()" @change="updateFriction($event)"></div>
+        </div>
         <a class="item" :class="{ disabled: selectedObject.textEnabled === false }" @click="changeText" title="Text"><img :src="'./svg/type.svg'"></a>
+        <a v-if="selectedObject.getClass() === 'checkpoint'" class="item" @click="setTempSpawnFromCheckpoint" title="Set as start position (temporary, for playtesting only)"><img :src="'./svg/play.svg'"></a>
         <div class="item">
           <label>
             <a action="color" title="Color"><img :src="'./svg/color.svg'"></a>
@@ -472,6 +820,23 @@
         </div>
         <a class="item" @click="duplicateSelectedObject" title="Duplicate (D)"><img :src="'./svg/duplicate.svg'"></a>
         <a class="item" @click="deleteSelectedObject" title="Delete (X)"><img :src="'./svg/trash.svg'"></a>
+      </div>
+    </div>
+    <div class="text-overlay" ref="textOverlay"></div>
+    <div class="block-type-picker" v-if="blockTypePickerVisible">
+      <div class="grid" @mouseleave="hoverBlockType(null)">
+        <div
+          v-for="(entry, i) in BLOCK_TYPE_GRID"
+          :key="i"
+          class="tile"
+          :class="{ filled: entry != null, hovered: entry != null && hoveredBlockType == entry.type }"
+          @mouseenter="hoverBlockType(entry ? entry.type : null)"
+        >
+          <template v-if="entry != null">
+            <img :src="'./svg/' + entry.icon">
+            <span>{{ entry.label }}</span>
+          </template>
+        </div>
       </div>
     </div>
     <OriginControls />

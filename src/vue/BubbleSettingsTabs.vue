@@ -7,6 +7,10 @@
 
 <template>
   <div class="tabs">
+    <div class="tab" :class="{ 'selected': tab == 'general' }" @click="$emit('changeTab', 'general');">
+      <label>{{ i18n.t('settings.general.title') }}</label>
+      <span class="material-symbols-rounded">settings</span>
+    </div>
     <div class="tab" :class="{ 'selected': tab == 'audio' }" @click="$emit('changeTab', 'audio');">
       <label>{{ i18n.t('settings.audio.title') }}</label>
       <span class="material-symbols-rounded">volume_up</span>

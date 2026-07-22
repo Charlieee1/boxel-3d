@@ -31,7 +31,9 @@ class Mouse {
 
   mouseUp(e) {
     // Some editor modes (drag-to-move, fast build) take over clicking entirely
-    if (app.levelEditor.isVanillaClickingSuppressed()) return;
+    // editorClickHandled: an editor pointerup listener already fully consumed this click (e.g. cut-out, set-pivot) and
+    // may have already cleared exclusiveAction, so isVanillaClickingSuppressed() alone can't be trusted here.
+    if (app.levelEditor.isVanillaClickingSuppressed() || e.editorClickHandled) return;
 
     if (app.play == false) {
       if (app.state == 'level-editor') {
@@ -56,8 +58,7 @@ class Mouse {
   }
 
   getPositionOnPlane(e, planeZ = 0) {
-    // Project the pointer onto the z = planeZ plane (works at any camera angle,
-    // unlike getPosition which only intersects the player's z-plane).
+    // Project the pointer onto the z = planeZ plane (works at any camera angle, unlike getPosition).
     var raycaster = new Raycaster();
     var pos = new Vector3();
     raycaster.setFromCamera(this.getMouse(e), app.camera);

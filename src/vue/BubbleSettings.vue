@@ -2,6 +2,7 @@
   import { ref, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BubbleSettingsTabs from './BubbleSettingsTabs.vue';
+  import BubbleSettingsPanelGeneral from './BubbleSettingsPanelGeneral.vue';
   import BubbleSettingsPanelGraphics from './BubbleSettingsPanelGraphics.vue';
   import BubbleSettingsPanelMultiplayer from './BubbleSettingsPanelMultiplayer.vue';
   import BubbleSettingsPanelControls from './BubbleSettingsPanelControls.vue';
@@ -11,7 +12,7 @@
 
   // Initialize attributes
   const i18n = useI18n({ useScope: 'global' });
-  var tab = ref('audio');
+  var tab = ref('general');
   var inputs = ref([]);
   var isOpen = ref(false);
   var settings = ref({});
@@ -134,6 +135,7 @@
       <div class="container">
         <BubbleSettingsTabs :tab="tab" @changeTab="changeTab" />
         <div class="content compact">
+          <BubbleSettingsPanelGeneral :settings="settings" v-show="tab == 'general'" @updateSettings="updateSettings" />
           <BubbleSettingsPanelAudio :settings="settings" v-show="tab == 'audio'" @updateSettings="updateSettings" />
           <BubbleSettingsPanelGraphics :settings="settings" v-show="tab == 'graphics'" @updateSettings="updateSettings" />
           <BubbleSettingsPanelControls :settings="settings" v-show="tab == 'controls'" @updateSettings="updateSettings" />

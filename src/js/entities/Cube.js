@@ -65,10 +65,8 @@ class Cube extends Mesh {
 
     if (this.position.y < -1000) {
       if (this.getClass() == 'player' && this.isStatic() == false) this.kill();
-      else {
-        app.level.removeObject(this, true);
-        //this.resetToOrigin();
-      }
+      // Freeze + hide instead of removing, so resetLevel() can still find and revive it.
+      else if (this.visible) this.hide(true);
     }
 
     // Update helper
@@ -234,7 +232,13 @@ class Cube extends Mesh {
   }
 
   setStatic(isStatic = true, updateOrigin = true) {
-    Body.setStatic(this.body, isStatic);
+    // Matter's Body.setStatic isn't idempotent: calling it with the body's CURRENT isStatic state
+    // overwrites its saved "_original" mass/inertia with the current (already Infinity, if static)
+    // values, permanently corrupting them - a later un-static call then restores Infinity mass,
+    // leaving a body flagged dynamic but with inverseMass 0. Two such corrupted bodies linked by the
+    // same constraint make Constraint.solve divide 0/0 (NaN), which then spreads to every other body
+    // sharing a constraint with either of them. Guard against no-op calls so _original never corrupts.
+    if (this.body.isStatic !== isStatic) Body.setStatic(this.body, isStatic);
     if (updateOrigin == true) this.setStaticOrigin(isStatic);
   }
 

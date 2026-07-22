@@ -110,6 +110,7 @@
       "custom_skin": "Custom Skin",
       "file_data_restored": "File Data Restored!",
       "info": "Info",
+      "invalid_cut_out": "Cut-out failed: the cutter must be smaller than the target block on both axes, and must overlap it.",
       "level_packs": "Level Packs",
       "paused": "Paused",
       "restore_cloud_data": "Restore all data from the cloud?",
@@ -142,6 +143,12 @@
       "reload": "Reload",
       "restore_from": "Restore from...",
       "title": "Data"
+    },
+    "general": {
+      "autosave": "Autosave",
+      "autosave_minutes": "{n} min",
+      "autosave_off": "Off",
+      "title": "General"
     },
     "graphics": {
       "auto_rotate": "Auto Rotate",
