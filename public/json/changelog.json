@@ -869,5 +869,11 @@
       "Added LEO as built-in feature",
       "Added new splash text"
     ]
+  },
+  {
+    "version": "2.9.3",
+    "revisions": [
+      "Fixed low FPS bug"
+    ]
   }
 ]
