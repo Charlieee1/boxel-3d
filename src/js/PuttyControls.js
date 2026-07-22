@@ -43,6 +43,7 @@ class PuttyControls extends Controls {
     super(camera, domElement);
     this.camera = camera;
     this.domElement = domElement;
+    this.activePoint = null; // pointA or pointB, whichever is actively being dragged (set in onDragStart, read by LevelEditor's vertex snap)
 
     // Add reactive properties
     const defineProperty = (name, value) => {
@@ -257,6 +258,9 @@ class PuttyControls extends Controls {
 
   onDragStart = event => {
     if (!this.object) return;
+
+    // Track which endpoint is being dragged, for external (vertex snap) correction after each drag frame.
+    this.activePoint = event.object;
 
     // Store the initial line direction and anchor point for lockRotation
     _vectorLineDirection.subVectors(this.pointB.position, this.pointA.position).normalize();

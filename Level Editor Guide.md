@@ -174,6 +174,80 @@ Press **L** to toggle thin-build mode. In this mode:
 
 ---
 
+## Vertex/End Snapping
+
+Press **,** (comma) to cycle through three snap modes, in order: **Normal** (off - plain grid snap, no overlay) → **Vertex Snap** (corners only) → **Centre Snap** (end-centers only) → back to **Normal**. Whichever of Vertex Snap/Centre Snap is active replaces the plain grid snap entirely (they never combine with grid snap, and never combine with each other):
+
+- **Vertex Snap:** new/dragged blocks snap to nearby blocks' **corners** only, in full 3D - end-centers are never considered in this mode
+- **Centre Snap:** new/dragged blocks snap to nearby blocks' **end-centers** only, in full 3D - corners are never considered in this mode
+- An "end-center" only exists on a clearly elongated block - looking at just its footprint (width/length, ignoring depth), the block needs to be more than twice as long as it is wide. Such a block has 2 end-centers, one at each end, inset from the block's own edge by half its width. A squarish block (not more than twice as long as wide) has no end-centers - Centre Snap instead uses that block's own plain center point as a stand-in
+- Works everywhere you'd normally place or drag a block: clicking to place, drag-to-move (**Q**), fast build, thin build's initial placement point and its free end while dragging the strip, and translate/scale/putty (**F**) on a single selected block - thin build's angle is never separately snapped/rounded, though; it's simply whatever direction falls out of the snapped free-end position
+- **Corners only snap to other corners in Vertex Snap mode, and end-centers only snap to other end-centers in Centre Snap mode - the two never mix.** Considers every corner (in Vertex Snap mode) or every end-center/center-point stand-in (in Centre Snap mode) on the block you're moving against every matching candidate on every other block, and snaps to whichever pair is closest overall - not just the nearest match for a single fixed point
+- If nothing is close enough to snap to, the block just uses its raw (unsnapped-to-grid) position for that point
+- A "Vertex Snap" or "Centre Snap" indicator shows in the top-right overlay while either mode is active; no indicator in Normal mode
+- Press **,** again to advance to the next mode in the cycle
+
+Handy for lining up ramps, stacking blocks corner-to-corner, or butting two blocks exactly end-to-end (this is also how the chain physics feature below detects which blocks are touching - use Centre Snap for lining up end-to-end).
+
+---
+
+## Custom Rotation Pivot
+
+By default, rotating a block spins it around its own center (or, for a multiselect group, around the group's center). You can override this with a custom pivot point:
+
+1. Press **.** (period) to arm pivot placement
+2. Click anywhere in the viewport - that 3D point becomes the pivot (a small orange marker shows where it is); your current selection stays selected, it does **not** get deselected by this click
+3. Switch to Rotate mode (**R**) and rotate as usual - the selection now spins around the pivot instead of its own center
+
+The pivot works for both a single selected block and a multiselect group's rotation.
+
+- The pivot **stays active across multiple rotations** - you don't need to re-place it each time
+- It's cleared when you **deselect** the current block/group, including by **selecting a different block**
+- It's also cleared once you **actually drag** a translate or scale (or putty) transform to completion - just switching to Translate/Scale mode without dragging anything does **not** clear it
+- Press **.** again at any time to place a new pivot elsewhere
+
+---
+
+## Chain Physics
+
+Let a set of touching blocks settle into a natural hanging/sagging shape under gravity (like a rope bridge sagging, or a chain hanging between two points), then freeze that shape permanently, with **P**. This is a one-time authoring aid, not a persistent feature - once it's done, the result is just ordinary static blocks positioned to look like a settled chain. It reuses the same box-select flow as Multiselect (**M**), just with a different last step:
+
+1. Press **P** - this enables box select, exactly like starting Multiselect
+2. Drag a box around the blocks you want in the chain
+3. Press **C** to confirm the box selection and move to the refine stage - click individual blocks to add/remove them one at a time (same as Multiselect's refine stage)
+4. Press **C** again to move to anchor-marking - every selected block highlights cyan; click any of them to flag it as a **static anchor** instead (highlights orange), click again to unflag it
+5. Press **C** a third time to confirm (needs at least 2 blocks), or **V**/Escape at any stage to cancel
+
+What happens on confirm:
+- Every block you added becomes **dynamic** (affected by physics) by default, **except** anchors, which stay static - this overrides whatever pinned/unpinned state the blocks had before
+- Blocks whose touching ends line up exactly get linked with a temporary physics joint at that point
+- If any blocks linked, the camera freezes and the blocks briefly vanish while a "Loading..." overlay shows - behind the scenes, physics runs forward invisibly (usually well under a second) until the shape stops moving
+- Once settled, every block's final position/rotation is baked in as its new permanent position and it's frozen static (scale is never changed by this) - the temporary joints are then discarded, so there's no ongoing physics or line/rope visual afterward, and nothing extra is saved with the level beyond the blocks' new positions
+- If nothing lines up closely enough to link, blocks just become dynamic/static per the anchor flags with no settle step (same as before)
+- Each dynamic block's mass during the settle is its full 3D volume (width x height x depth), not just its 2D footprint - so a block's Z depth (or any dimension) is a way to intentionally make a segment heavier/lighter and change how much it sags relative to its neighbors
+
+Notes:
+- Only axis-aligned (no X/Y tilt) blocks can be linked - same restriction as Cut Out
+- Two blocks only link if their ends (or, for squarish blocks with no end-centers, their plain centers) touch *exactly* (accounting for tiny floating-point rounding) - use Vertex/End Snapping above to line them up first
+- Linking only ever considers blocks from the selection you just confirmed - it never scans the whole level, so unrelated touching blocks elsewhere are left alone
+- Running **P** again elsewhere in the level (or again over the same blocks) is a fresh, independent settle each time - there's no persistent chain concept left to add to or rescan
+
+---
+
+## Set Temporary Start Position
+
+When a **checkpoint** block is selected, its property panel gets an extra button (the play-icon one) - "Set as start position". Clicking it:
+
+- Sets a temporary spawn point at that checkpoint's position/rotation, used only for playtesting from inside the editor
+- Pressing **Play** will spawn you there instead of the level's real player start, until you exit the level or load a different one
+- Pressing **R** to Retry mid-playtest also respawns you at the temp spawn point
+- The **"Restart Level" toolbar button** (rewind icon) is different - it's meant to fully exit playtesting and return to a clean editor state, so it does **not** re-apply the temp spawn override; it always puts everything back to the level's real saved state
+- It's **never saved** with the level - the real player start position is completely unaffected, even momentarily, so it can't accidentally get picked up by autosave or anything else that reads the player's position
+
+Useful for quickly testing a specific section of a level without playing through from the very beginning each time.
+
+---
+
 ## Property Edits (Toolbar)
 
 ### Coordinates Input
@@ -226,7 +300,16 @@ The overlay shows the current editor state in 1–3 lines:
 - **Multiselect** - you are in multiselect mode
 - **Fast Build** - you are in fast-build mode
 - **Thin Build** - you are in thin-build mode
+- **Cut Out** - you've armed cut-out mode and are waiting for a cutter block
+- **Set Pivot** - you've armed custom pivot placement and are waiting for a click
+- **Chain** - you're building a chain (reuses Multiselect's Box Select/Refine stages, then Mark Anchors, then C to confirm)
 - (Only one of these at a time; it disappears when you exit)
+
+### Independent rows (can appear alongside anything else)
+- **Force Build** - force-build mode (**N**) is on
+- **Vertex Snap** - vertex/end snapping (**,**) is in Vertex Snap mode (corners only)
+- **Centre Snap** - vertex/end snapping (**,**) is in Centre Snap mode (end-centers only)
+- **Flip (Pending)** - you pressed **B** and it's waiting for a second **B** or **N**
 
 ### Line 2 (Stage, within Multiselect or Fast Build)
 For **Multiselect**:
@@ -253,8 +336,8 @@ For **Fast Build**:
 |---|---|---|---|
 | **0** | Any | Reset spawn plane | Selected block(s) move to current Z; spawn plane resets to current Z |
 | **A** | Any | Open block picker | 4×4 grid of block types appears; hover to preview, click to select |
-| **B, B** (within 400ms) | Any | Flip XZ | Flip around YZ plane (left-right) |
-| **B, N** (within 400ms) | Any | Flip YZ | Flip around XZ plane (front-back) |
+| **B, B** | Any | Flip XZ | Flip around YZ plane (left-right) |
+| **B, N** | Any | Flip YZ | Flip around XZ plane (front-back) |
 | **C** | Transform active | Confirm | Save transform to history, exit transform mode |
 | **D** | Single or Multiselect | Duplicate | Create a copy offset by a fixed amount (or stamp if dragging in translate mode) |
 | **V** | Transform active | Cancel | Revert to pre-transform state, stay in same mode |
@@ -271,6 +354,9 @@ For **Fast Build**:
 | **[** | Any | Reset Camera | Camera Z distance and rotation reset to default; X/Y pan preserved |
 | **]** | Any | Set Camera XY | Opens a popup to type an exact camera X/Y position |
 | **/** | Block selected | Arm Cut Out | Click a second block to subtract its footprint from the selected block |
+| **,** | Any | Cycle Vertex/End Snap | Cycles Normal → Vertex Snap (corners only) → Centre Snap (end-centers only) → Normal; placement/drag points snap accordingly instead of the grid |
+| **.** | Any | Arm Custom Pivot | Next click sets a rotation pivot for the current selection |
+| **P** | Any | Arm Chain Creation | Box-select like Multiselect; C confirms box select, C again confirms refine into anchor-marking, C a third time builds the chain |
 | **R** | Single | Rotate | Drag to spin; press R again to toggle axis visibility |
 | **S** | Single or Multiselect | Scale or Cycle Scale Mode | Single: uniform scale; Multiselect + Transform: cycle through lock modes |
 | **Ctrl+S** | Any | Save | Save current level |
@@ -299,8 +385,8 @@ For **Fast Build**:
 - **Escape** cancels the transform AND exits the mode entirely
 
 ### Can I rotate around a different point?
-- Not yet in the current implementation (item #24 in backlog: "Rotation around offset point")
-- Currently, rotations are always around the object's center (or group center for multiselect)
+- Yes - press **.** to place a custom pivot point, then rotate as usual (see "Custom Rotation Pivot" above)
+- Without a custom pivot set, rotations default to the object's own center (or group center for multiselect)
 
 ### How does friction work?
 - A slider on the toolbar (0 to 1, steps of 0.25)

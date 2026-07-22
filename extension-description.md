@@ -10,6 +10,7 @@ No internet? No problem. Play offline to beat your high scores.
 Changelog:
 
 v2.9.2-m1.1.0
+Level Editor:
 - Added thin fast build mode
 - Added textbox to change default building plane
 - Added hover gizmo mode
@@ -20,7 +21,16 @@ v2.9.2-m1.1.0
 - Added current action display overlay
 - Added default block colour setting
 - Added autosave
+- Added two new snap modes in level editor
+- Added chain simulation operation
+- Border around power block icon removed
+- Added rotation around pivot
+- Added temporary player start positions
+Other:
 - Added new settings tab
+
+v2.9.3
+- Fixed low FPS bug
 
 v2.9.2-m1.0.0
 - Added LEO as built-in feature

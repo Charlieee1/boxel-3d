@@ -48,13 +48,15 @@
     'multiselect': 'Multiselect',
     'fast-build': 'Fast Build',
     'thin-build': 'Thin Build',
-    'cut-out': 'Cut Out'
+    'cut-out': 'Cut Out',
+    'set-pivot': 'Set Pivot'
   };
 
   // Stages shown as a second row layered above a blocking state's base label
   const EXCLUSIVE_ACTION_STAGE_LABELS = {
     'fast-build': { create: 'Create', scale: 'Scale', rotate: 'Rotate', move: 'Move' },
-    'multiselect': { marquee: 'Box Select', refine: 'Refine', transform: 'Transform' }
+    // "anchor" only occurs for "P" chain, which reuses this same 'multiselect' name/staging (see LevelEditor.armChainMode()).
+    'multiselect': { marquee: 'Box Select', refine: 'Refine', transform: 'Transform', anchor: 'Mark Anchors' }
   };
 
   // Third row shown during multiselect transform + scale mode, reflecting the current scale-lock cycle
@@ -64,8 +66,11 @@
     'xyz-locked': 'Scale (Locked XYZ)'
   };
 
+  let currentActionLabel = null; // exact text of the currently shown exclusive-action row, for precise removal
   let stageRowActive = false; // whether the top (stage) row is currently shown
+  let currentStageLabel = null; // exact text of the currently shown stage row, for precise removal
   let scaleLockRowActive = false; // whether the scale-lock row is currently shown
+  let currentScaleLockLabel = null; // exact text of the currently shown scale-lock row, for precise removal
   let flipChordRowActive = false; // whether the "Flip (Pending)" row is currently shown
 
   // Arms/clears the "B,_" flip chord row; kept separate from the addRow/removeRow stack since it can start/end independently of any other row.
@@ -96,23 +101,47 @@
     forceBuildRowActive = false;
   }
 
+  // Shows/hides the persistent "Vertex Snap"/"Centre Snap" row (","), same independent-of-the-stack mechanism as Force Build.
+  let snapModeRowActive = false;
+  let currentSnapModeLabel = null;
+
+  function onSnapModeChanged(e) {
+    if (snapModeRowActive) {
+      removeRowByText(currentSnapModeLabel);
+      snapModeRowActive = false;
+      currentSnapModeLabel = null;
+    }
+    var label = e.detail.mode === 'vertex' ? 'Vertex Snap' : e.detail.mode === 'centre' ? 'Centre Snap' : null;
+    if (label) {
+      addRow(label);
+      currentSnapModeLabel = label;
+      snapModeRowActive = true;
+    }
+  }
+
   // Shows/hides/refreshes the scale-lock row based on current mode + multiselect transform state
   function updateScaleLockRow() {
     if (scaleLockRowActive) {
-      removeRow();
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
       scaleLockRowActive = false;
     }
     if (app.levelEditor.isMultiselectTransform() && selectedMode.value === 'scale') {
       var mode = app.levelEditor.exclusiveAction?.scaleMode || 'free';
-      addRow(SCALE_LOCK_LABELS[mode]);
+      currentScaleLockLabel = SCALE_LOCK_LABELS[mode];
+      addRow(currentScaleLockLabel);
       scaleLockRowActive = true;
     }
   }
 
   function onLevelEditorActionStarted(e) {
     if (e.detail.name === 'select-block-type') blockTypePickerVisible.value = true;
-    const label = EXCLUSIVE_ACTION_LABELS[e.detail.name];
-    if (label) addRow(label);
+    // "P" chain reuses the 'multiselect' action name/staging (purpose 'chain') - show "Chain" instead of "Multiselect".
+    const label = (e.detail.name === 'multiselect' && e.detail.purpose === 'chain') ? 'Chain' : EXCLUSIVE_ACTION_LABELS[e.detail.name];
+    if (label) {
+      addRow(label);
+      currentActionLabel = label;
+    }
   }
 
   function onLevelEditorActionEnded(e) {
@@ -122,14 +151,20 @@
     }
     if (!EXCLUSIVE_ACTION_LABELS[e.detail.name]) return;
     if (scaleLockRowActive) {
-      removeRow();
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
       scaleLockRowActive = false;
     }
     if (stageRowActive) {
-      removeRow();
+      removeRowByText(currentStageLabel);
+      currentStageLabel = null;
       stageRowActive = false;
     }
-    removeRow();
+    // levelEditorActionEnded's detail carries only `name` (not `purpose`), so use the label tracked at start time rather than recomputing it.
+    if (currentActionLabel) {
+      removeRowByText(currentActionLabel);
+      currentActionLabel = null;
+    }
   }
 
   // Mouse hover on a picker tile: updates the highlight and drives the live type-preview in LevelEditor.js.
@@ -143,11 +178,13 @@
     const stageLabel = EXCLUSIVE_ACTION_STAGE_LABELS[e.detail.name]?.[e.detail.stage];
     if (!stageLabel) return;
     if (scaleLockRowActive) {
-      removeRow();
+      removeRowByText(currentScaleLockLabel);
+      currentScaleLockLabel = null;
       scaleLockRowActive = false;
     }
-    if (stageRowActive) removeRow();
+    if (stageRowActive) removeRowByText(currentStageLabel);
     addRow(stageLabel);
+    currentStageLabel = stageLabel;
     stageRowActive = true;
     updateScaleLockRow();
   }
@@ -208,6 +245,7 @@
     window.addEventListener('themeSelected', onThemeSelected);
     window.addEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.addEventListener('forceBuildDisabled', onForceBuildDisabled);
+    window.addEventListener('snapModeChanged', onSnapModeChanged);
   }
 
   function removeEventListeners() {
@@ -229,6 +267,7 @@
     window.removeEventListener('themeSelected', onThemeSelected);
     window.removeEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.removeEventListener('forceBuildDisabled', onForceBuildDisabled);
+    window.removeEventListener('snapModeChanged', onSnapModeChanged);
   }
 
   function popupOpened() {
@@ -331,6 +370,9 @@
   function pauseLevel() {
     objectTypeVisible.value = true;
     app.pauseLevel();
+    // Restore every object (including the player) to its real saved state - undoes playtest physics drift
+    // and any "Set as start position" temp spawn override, same reset retryLevel() uses to start a fresh run.
+    app.resetScene();
     app.level.deselectLevel();
     app.levelEditor.controlsOrbit.enabled = true;
     app.levelEditor.controlsOrbit.reset();
@@ -349,6 +391,8 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
+    // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
+    app.levelEditor.applyTempSpawn();
     app.startLevel();
   }
 
@@ -368,6 +412,11 @@
 
   function toggleSelectedObjectStaticState() {
     app.levelEditor.toggleSelectedObjectStaticState();
+  }
+
+  // Checkpoint property panel button: session-only playtest spawn override (see playCurrentLevel above).
+  function setTempSpawnFromCheckpoint() {
+    app.levelEditor.setTempSpawnFromCheckpoint(selectedObject.value);
   }
 
   function setTransformMode(e) {
@@ -626,6 +675,15 @@
           e.preventDefault();
           app.levelEditor.enterCutOutMode();
         }
+        else if (e.code == 'Comma' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.cycleSnapMode();
+        }
+        else if (e.code == 'Period' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.armCustomPivot();
+        }
+        else if (e.code == 'KeyP' && e.ctrlKey == false && e.metaKey == false) {
+          app.levelEditor.armChainMode();
+        }
       }
     }
 
@@ -753,6 +811,7 @@
           <div class="slider"><input name="friction" type="range" min="0" max="1" step="0.25" :value="selectedObject.getFriction()" @change="updateFriction($event)"></div>
         </div>
         <a class="item" :class="{ disabled: selectedObject.textEnabled === false }" @click="changeText" title="Text"><img :src="'./svg/type.svg'"></a>
+        <a v-if="selectedObject.getClass() === 'checkpoint'" class="item" @click="setTempSpawnFromCheckpoint" title="Set as start position (temporary, for playtesting only)"><img :src="'./svg/play.svg'"></a>
         <div class="item">
           <label>
             <a action="color" title="Color"><img :src="'./svg/color.svg'"></a>

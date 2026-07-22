@@ -1,11 +1,28 @@
-import { Vector2, Vector3 } from 'three';
-import { Composite, World } from 'matter-js';
+import { Euler, Mesh, MeshBasicMaterial, Object3D, SphereGeometry, Vector2, Vector3 } from 'three';
+import { Body, Composite, Engine, World } from 'matter-js';
 import { PuttyControls } from './PuttyControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 // Scratch vector reused for world -> screen projection (multiselect marquee).
 const _screenVec = new Vector3();
+
+// Tuning for "P" chain physics' invisible settle simulation (see LevelEditor.settleChainAndBake) - a
+// one-time level-authoring aid, not a live gameplay loop, so these are UX-tuning constants rather than
+// physics-accuracy ones:
+// - timestep matches the main loop's fixed engine step (see App.js updateEngine/interval.add).
+// - totalSteps is a safety cap of 5 simulated seconds - plenty of time for a chain to hang/sag out.
+// - speedThreshold/stableFramesNeeded let the settle stop early once the chain has visibly stopped moving.
+const CHAIN_SETTLE_TUNING = {
+  timestep: 1000 / 60,
+  totalSteps: 3600, // 60 simulated seconds at 60 steps/sec
+  speedThreshold: 0.01,
+  stableFramesNeeded: 10
+};
+
+// Running counter so each chain settle gets its own negative collisionFilter.group - Matter treats any
+// pair of bodies sharing the same negative group as never-colliding, regardless of category/mask.
+var chainSettleGroupCounter = 0;
 
 class LevelEditor {
   constructor(camera, domElement) {
@@ -66,6 +83,20 @@ class LevelEditor {
     // "B,B"/"B,N" chord: flip the selection. First "B" arms indefinitely; a following B or N completes it.
     this.chordPending = null; // 'B' while armed, else null
 
+    // ",": cycles vertex/end snapping mode ('normal' -> 'vertex' -> 'centre' -> 'normal'), overrides plain grid snap while not 'normal' (see keybinds.md).
+    this.snapMode = 'normal';
+
+    // ".": arm/set a custom rotation pivot point, overriding single/group rotation center until cleared.
+    this.customPivot = null; // { x, y, z } while set, else null
+    this.pivotMarkerMesh = null;
+    this.pivotProxy = null; // invisible Object3D the gizmo attaches to (in rotate mode) instead of the real object
+    this.pivotProxyTarget = null; // the real object being remapped through the proxy
+    this.pivotProxySnapshot = null; // pivotProxyTarget's position/rotation at the start of the current drag
+
+    // Session-only "Set as start position" playtest override (checkpoint property panel button, see OriginPageLevelEditor.vue).
+    this.tempSpawnPosition = null;
+    this.tempSpawnRotation = null;
+
     // Initialize helper visibility from current mode.
     this.applyControlsModeState();
 
@@ -74,6 +105,8 @@ class LevelEditor {
     this.controlsPutty.addEventListener('dragend', () => {
       this.controlsOrbit.enabled = true;
       this.puttyDragging = false;
+      // Putty is a non-rotate transform - an actual drag clears the custom pivot (see keybinds.md "." details).
+      if (this.controlsPutty.moved) this.clearCustomPivot();
       // During a group transform the attached object is the control block, not a real object - skip body-sync/save.
       if (this.isMultiselectTransform()) { this.endHoverDrag(); return; }
       this.updateSelectedObject();
@@ -83,6 +116,8 @@ class LevelEditor {
       this.controlsPutty.moved = true;
       // Remap the whole selection as the group control block is putty-dragged.
       if (this.isMultiselectTransform()) this.updateGroupTransform();
+      // Vertex/end snapping overrides putty's own built-in grid snap (see mouseDown() and applyVertexSnapToPutty()).
+      else if (this.snapMode !== 'normal' && app.selectedObject) this.applyVertexSnapToPutty();
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
     this.controlsPutty.addEventListener('hoveron', () => { this.puttyHovering = true; });
@@ -92,8 +127,17 @@ class LevelEditor {
     this.controlsTransform.addEventListener('mouseDown', () => { this.controlsOrbit.enabled = false; this.beginHoverDrag(); this.saveSelectedObject(); });
     this.controlsTransform.addEventListener('mouseUp', () => {
       this.controlsOrbit.enabled = true;
+      // A completed translate/scale drag (not rotate), single object or group, clears the custom pivot (see keybinds.md "." details).
+      if (this.selectedMode !== 'rotate' && this.controlsTransform.moved) this.clearCustomPivot();
       // During a group transform the attached object is the control block, not a real object - skip body-sync/save.
       if (this.isMultiselectTransform()) { this.endHoverDrag(); return; }
+      // Re-snapshot the pivot proxy so the next rotate drag starts fresh from the object's new transform.
+      if (this.pivotProxyTarget) {
+        var t = this.pivotProxyTarget;
+        this.pivotProxySnapshot = { x: t.position.x, y: t.position.y, z: t.position.z, rx: t.rotation.x, ry: t.rotation.y, rz: t.rotation.z };
+        this.pivotProxy.rotation.set(0, 0, 0);
+        this.pivotProxy.updateMatrixWorld();
+      }
       this.updateSelectedObject();
       this.endHoverDrag();
     });
@@ -101,6 +145,12 @@ class LevelEditor {
       this.controlsTransform.moved = true;
       // Remap the whole selection as the group control block is dragged.
       if (this.isMultiselectTransform()) this.updateGroupTransform();
+      // Rotating a single object around a custom pivot remaps it through the invisible pivot proxy instead.
+      else if (this.pivotProxyTarget) this.updatePivotRotation();
+      // Vertex/end snapping overrides the gizmo's built-in grid snap for a plain translate drag.
+      else if (this.snapMode !== 'normal' && this.selectedMode === 'translate' && app.selectedObject) this.applyVertexSnapToSelection();
+      // Same, for a scale drag - corrects scale (not position) since scale is symmetric about the object center.
+      else if (this.snapMode !== 'normal' && this.selectedMode === 'scale' && app.selectedObject) this.applyVertexSnapToScale(app.selectedObject);
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
 
@@ -159,15 +209,19 @@ class LevelEditor {
     else if (this.exclusiveAction?.name === 'fast-build') this.fastBuildPointerUp(e);
     else if (this.exclusiveAction?.name === 'thin-build') this.thinBuildPointerUp(e);
     else if (this.exclusiveAction?.name === 'cut-out') this.cutOutPointerUp(e);
+    else if (this.exclusiveAction?.name === 'set-pivot') this.resolveCustomPivotClick(e);
+    else if (this.isChainAnchorStage()) this.chainAnchorPointerUp(e);
     this.updateRender();
   }
 
-  // Whether an editor mode (drag-move, fast/thin build, multiselect marquee/refine, cut-out) suppresses vanilla clicking; transform stage is not suppressed.
+  // Whether an editor mode (drag-move, fast/thin build, multiselect marquee/refine/anchor, cut-out, set-pivot) suppresses vanilla clicking; transform stage is not suppressed.
   isVanillaClickingSuppressed() {
     return this.dragMove.enabled
       || this.exclusiveAction?.name === 'fast-build'
       || this.exclusiveAction?.name === 'thin-build'
       || this.exclusiveAction?.name === 'cut-out'
+      || this.exclusiveAction?.name === 'set-pivot'
+      || this.isChainAnchorStage()
       || this.isMultiselectSelectionStage();
   }
 
@@ -229,13 +283,11 @@ class LevelEditor {
     this.dragMove.moved = false;
     app.selectedObject = object;
 
-    // Snap the grab point, then store its (unsnapped) offset from the block origin
-    var snap = app.mouse.snap;
+    // Snap the grab point (vertex/end snap if active, else the plain grid), then store its offset from the block origin
     var point = app.mouse.getPositionOnPlane(e, object.position.z);
-    var grabX = point ? app.mouse.snapToValue(point.x, snap) : object.position.x;
-    var grabY = point ? app.mouse.snapToValue(point.y, snap) : object.position.y;
-    this.dragMove.offset.x = grabX - object.position.x;
-    this.dragMove.offset.y = grabY - object.position.y;
+    var grab = point ? this.snapPoint({ x: point.x, y: point.y, z: object.position.z }, object) : { x: object.position.x, y: object.position.y };
+    this.dragMove.offset.x = grab.x - object.position.x;
+    this.dragMove.offset.y = grab.y - object.position.y;
   }
 
   dragMoveMove(e) {
@@ -243,15 +295,27 @@ class LevelEditor {
     if (app.selectedObject == null) return;
 
     var object = app.selectedObject;
-    var snap = app.mouse.snap;
     var point = app.mouse.getPositionOnPlane(e, object.position.z);
     if (point == null) return;
 
-    object.setPosition({
-      x: app.mouse.snapToValue(point.x, snap) - this.dragMove.offset.x,
-      y: app.mouse.snapToValue(point.y, snap) - this.dragMove.offset.y,
-      z: object.position.z
-    });
+    if (this.snapMode !== 'normal') {
+      // Move to the raw (unsnapped) cursor-tracked position first so the object's own vertices reflect the live
+      // drag, then correct via closest-pair vertex/end-centre snap across every vertex/end-centre (see applyClosestVertexSnap).
+      object.setPosition({
+        x: point.x - this.dragMove.offset.x,
+        y: point.y - this.dragMove.offset.y,
+        z: object.position.z
+      });
+      this.applyClosestVertexSnap(object);
+    }
+    else {
+      var snapped = this.snapPoint({ x: point.x, y: point.y, z: object.position.z }, object);
+      object.setPosition({
+        x: snapped.x - this.dragMove.offset.x,
+        y: snapped.y - this.dragMove.offset.y,
+        z: object.position.z
+      });
+    }
     this.dragMove.moved = true;
 
     // If the grabbed object is the multiselect control block, remap the group.
@@ -268,6 +332,8 @@ class LevelEditor {
     var isGroupMove = this.isMultiselectTransform() && app.selectedObject === this.exclusiveAction.controlBlock;
     // Outside multiselect, save one entry per move; inside a group transform it's folded into the transform's entry instead.
     if (this.dragMove.moved && isGroupMove == false) app.levelHistory.save('Moved object');
+    // Drag-to-move is a translate action - an actual move (single object or group) clears the custom pivot (see keybinds.md "." details).
+    if (this.dragMove.moved) this.clearCustomPivot();
     // Keep the control block selected (gizmo stays) if Q moved the group; otherwise clear the transient selection.
     app.selectedObject = isGroupMove ? this.exclusiveAction.controlBlock : null;
   }
@@ -347,9 +413,8 @@ class LevelEditor {
 
   fastBuildCreateBlock(e) {
     var action = this.exclusiveAction;
-    var pos = app.mouse.getPosition(e);
-    pos.x = app.mouse.snapToValue(pos.x, app.mouse.snap);
-    pos.y = app.mouse.snapToValue(pos.y, app.mouse.snap);
+    var raw = app.mouse.getPosition(e);
+    var pos = this.snapPoint({ x: raw.x, y: raw.y, z: this.currentZ }, null);
 
     var type = this.selectedObjectType;
     var block = app.level.entityFactory.createObject(type);
@@ -371,9 +436,8 @@ class LevelEditor {
     if (action.block == null) return; // still in 'create': nothing to preview yet
 
     if (action.stage == 'scale') {
-      var pos2 = app.mouse.getPosition(e);
-      pos2.x = app.mouse.snapToValue(pos2.x, app.mouse.snap);
-      pos2.y = app.mouse.snapToValue(pos2.y, app.mouse.snap);
+      var raw2 = app.mouse.getPosition(e);
+      var pos2 = this.snapPoint({ x: raw2.x, y: raw2.y, z: this.currentZ }, action.block);
       var origin = action.origin;
 
       app.level.setObjectProperties(action.block, {
@@ -395,9 +459,8 @@ class LevelEditor {
       action.block.setRotation({ x: 0, y: 0, z: angle });
     }
     else if (action.stage == 'move') {
-      var pos = app.mouse.getPosition(e);
-      pos.x = app.mouse.snapToValue(pos.x, app.mouse.snap);
-      pos.y = app.mouse.snapToValue(pos.y, app.mouse.snap);
+      var raw = app.mouse.getPosition(e);
+      var pos = this.snapPoint({ x: raw.x, y: raw.y, z: action.block.position.z }, action.block);
       action.block.setPosition({ x: pos.x, y: pos.y, z: action.block.position.z });
     }
 
@@ -434,9 +497,9 @@ class LevelEditor {
     var action = this.exclusiveAction;
     if (action.block != null) return; // already dragging one out
 
-    var pos = app.mouse.getPosition(e);
-    pos.x = app.mouse.snapToValue(pos.x, app.mouse.snap);
-    pos.y = app.mouse.snapToValue(pos.y, app.mouse.snap);
+    var raw = app.mouse.getPositionOnPlane(e, this.currentZ);
+    if (raw == null) return;
+    var pos = this.snapPoint({ x: raw.x, y: raw.y, z: this.currentZ }, null);
 
     var type = this.selectedObjectType;
     var block = app.level.entityFactory.createObject(type);
@@ -457,19 +520,31 @@ class LevelEditor {
     var action = this.exclusiveAction;
     if (action.block == null) return; // no block yet: still waiting for pointerdown
 
-    var pos = app.mouse.getPosition(e);
+    var raw = app.mouse.getPositionOnPlane(e, this.currentZ);
+    if (raw == null) return;
     var origin = action.origin;
-    var dx = pos.x - origin.x;
-    var dy = pos.y - origin.y;
-    var length = Math.hypot(dx, dy);
-    var angle = Math.atan2(dy, dx);
-    if (app.mouse.snap > 1) {
-      angle = Math.round(angle / (Math.PI / 12)) * (Math.PI / 12); // 15 degree steps
-      length = app.mouse.snapToValue(length, app.mouse.snap);
+    var endX, endY;
+
+    if (this.snapMode !== 'normal') {
+      // Vertex-snap fully replaces grid-snap here: start from the raw endpoint, then type-match the strip's
+      // own far end (the end actually being dragged) against other blocks' vertices/end-centres.
+      endX = raw.x;
+      endY = raw.y;
+      var delta = this.closestTypedFarEndSnap(origin.x, origin.y, endX, endY, this.currentZ, app.BOX_SIZE, action.block);
+      if (delta) { endX += delta.x; endY += delta.y; }
     }
-    length = Math.max(length, app.mouse.snap); // never collapse to a zero-length block
-    var endX = origin.x + Math.cos(angle) * length;
-    var endY = origin.y + Math.sin(angle) * length;
+    else {
+      endX = app.mouse.snapToValue(raw.x, app.mouse.snap);
+      endY = app.mouse.snapToValue(raw.y, app.mouse.snap);
+    }
+
+    var length = Math.hypot(endX - origin.x, endY - origin.y);
+    var angle = Math.atan2(endY - origin.y, endX - origin.x);
+    // Never collapse to a zero-length block; under vertex snap, honor a short-but-real snapped length (grid-snap floor would override a valid nearby vertex match).
+    var minLength = this.snapMode !== 'normal' ? 0.001 : app.mouse.snap;
+    length = Math.max(length, minLength);
+    endX = origin.x + Math.cos(angle) * length;
+    endY = origin.y + Math.sin(angle) * length;
 
     app.level.setObjectProperties(action.block, {
       position: { x: 0.5 * (origin.x + endX), y: 0.5 * (origin.y + endY), z: this.currentZ },
@@ -503,10 +578,12 @@ class LevelEditor {
     this.startMultiselect();
   }
 
-  startMultiselect() {
+  // `purpose`: null for plain "M" multiselect, or 'chain' when reused by "P" (see armChainMode()).
+  startMultiselect(purpose = null) {
     var action = this.startExclusiveAction('multiselect', {
       confirm: () => this.enterMultiselectRefine(),
-      cancel: () => this.cleanupMultiselect()
+      cancel: () => this.cleanupMultiselect(),
+      purpose: purpose
     });
     this.setExclusiveActionStage('marquee');
     action.selected = [];
@@ -516,6 +593,7 @@ class LevelEditor {
     action.groupBox = null;
     action.historyIndex = null;
     action.scaleMode = 'free'; // 'free' | 'xy-locked' | 'xyz-locked'
+    action.anchors = new Set(); // chain purpose only: blocks flagged static in the anchor stage (see enterChainAnchorStage)
     this.setOrbitLeftEnabled(false); // left = marquee; middle/right/wheel = camera
   }
 
@@ -524,7 +602,8 @@ class LevelEditor {
     var action = this.exclusiveAction;
     if (action.stage !== 'marquee') return;
     this.setExclusiveActionStage('refine');
-    action.confirm = () => this.enterMultiselectTransform();
+    // Chain purpose diverts after refine into anchor-marking instead of the normal transform stage (see keybinds.md "P").
+    action.confirm = action.purpose === 'chain' ? () => this.enterChainAnchorStage() : () => this.enterMultiselectTransform();
     action.cancel = () => this.cleanupMultiselect();
     this.setOrbitLeftEnabled(true); // left-click toggles, left-drag pans the camera
     this.hideMarquee();
@@ -544,6 +623,7 @@ class LevelEditor {
     app.level.deselectLevel();
     this.detachControls();
     app.selectedObject = null;
+    this.clearCustomPivot(); // deselecting the group clears any custom pivot (see keybinds.md "." details)
     this.setOrbitLeftEnabled(true);        // restore left-button pan
     this.setOrbitInteractionEnabled(true); // in case Q was used mid-action
     this.endExclusiveAction();
@@ -719,6 +799,14 @@ class LevelEditor {
       boxX: (maxX - minX) || app.BOX_SIZE, boxY: (maxY - minY) || app.BOX_SIZE, boxZ: (maxZ - minZ) || app.BOX_SIZE
     };
 
+    // A custom pivot (".") overrides the group's rotation center by moving the control block itself there -
+    // scale/translate for this transform session become relative to it too (documented tradeoff, see keybinds.md "." details).
+    if (this.customPivot != null) {
+      action.groupBox.midX = this.customPivot.x;
+      action.groupBox.midY = this.customPivot.y;
+      action.groupBox.midZ = this.customPivot.z;
+    }
+
     // Preserve the pre-transform history point so confirm/cancel always resolve to one clean entry.
     if (action.historyIndex == null) action.historyIndex = app.levelHistory.historyIndex;
 
@@ -737,15 +825,17 @@ class LevelEditor {
     var baseSelect = block.select.bind(block);
     block.select = state => { baseSelect(state); block.shapes.setColors('#00ffff', false); block.shapes.setOpacities(0.2); };
 
+    // Advance the stage before attaching so attachControls() correctly treats this as the group's control block
+    // (isMultiselectTransform() must already be true here, or a custom pivot would wrongly route it through the pivot proxy).
+    this.setExclusiveActionStage('transform');
+    action.confirm = () => this.confirmMultiselectTransform();
+    action.cancel = () => this.cancelMultiselectTransform();
+
     // Select it so the transform gizmo attaches.
     app.level.deselectLevel();
     app.selectedObject = block;
     block.select(true);
     this.attachControls(block);
-
-    this.setExclusiveActionStage('transform');
-    action.confirm = () => this.confirmMultiselectTransform();
-    action.cancel = () => this.cancelMultiselectTransform();
     this.setOrbitLeftEnabled(true); // left-drag pans; the gizmo captures its handles
 
     window.dispatchEvent(new CustomEvent('setSelectedObject', { detail: block }));
@@ -927,6 +1017,294 @@ class LevelEditor {
     return distance < this.snap;
   }
 
+  // ============================== "," Vertex/end snapping ==============================
+
+  // ",": cycles vertex/end snapping mode 'normal' -> 'vertex' -> 'centre' -> 'normal' (see keybinds.md).
+  // 'vertex': only vertex-vertex matching. 'centre': only end-centre-to-end-centre matching. Never both at once.
+  cycleSnapMode() {
+    this.snapMode = this.snapMode === 'normal' ? 'vertex' : this.snapMode === 'vertex' ? 'centre' : 'normal';
+    window.dispatchEvent(new CustomEvent('snapModeChanged', { detail: { mode: this.snapMode } }));
+  }
+
+  // Nearest vertex/end-center among every other block, within a tolerance relative to grid size; null if none in range.
+  // Candidates are restricted to `this.snapMode`: only vertices when 'vertex', only end-candidates when 'centre'.
+  // ignoreZ: exclude Z from the distance/tolerance check (for callers that don't want the matched Z, e.g. snapPoint
+  // with snapZ=false) - otherwise a fixed build-height point would consume the whole tolerance in Z alone.
+  snapToNearestVertex(point, exclude, ignoreZ = false) {
+    var tolerance = app.BOX_SIZE * 0.5; // reasonable snap radius relative to the grid unit
+    var best = null, bestDist = tolerance;
+    var children = app.level.children;
+    for (var i = 0; i < children.length; i++) {
+      var obj = children[i];
+      if (obj.isCube !== true || obj === app.player || obj === exclude) continue;
+      if (this.exclusiveAction?.controlBlock === obj) continue; // never snap to the (transient) multiselect control block
+      var candidates;
+      if (this.snapMode === 'vertex') candidates = app.util.getBlockEndPoints(obj).vertices;
+      else if (this.snapMode === 'centre') candidates = app.util.getBlockEndCandidates(obj).points;
+      else candidates = [];
+      for (var j = 0; j < candidates.length; j++) {
+        var c = candidates[j];
+        var d = ignoreZ ? Math.hypot(point.x - c.x, point.y - c.y) : Math.hypot(point.x - c.x, point.y - c.y, point.z - c.z);
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
+    }
+    return best;
+  }
+
+  // Closest vertex/end-centre PAIR between `obj`'s own 8 vertices/6 end-centres and every other block's -
+  // restricted to the current `this.snapMode`: only the vertex-vertex pass runs in 'vertex' mode, only the
+  // centre-centre pass runs in 'centre' mode (never both), within a tolerance relative to grid size; null if
+  // none in range. Shared by translate/Q-drag/scale vertex snapping (see keybinds.md ",").
+  closestVertexSnapMatch(obj) {
+    var tolerance = app.BOX_SIZE * 0.5; // reasonable snap radius relative to the grid unit
+    var matchVertices = this.snapMode === 'vertex';
+    var matchCentres = this.snapMode === 'centre';
+    var moving = matchVertices ? app.util.getBlockEndPoints(obj) : null;
+    var movingEnds = matchCentres ? app.util.getBlockEndCandidates(obj) : null;
+    var movingVertices = matchVertices ? moving.vertices.map((p, i) => ({ point: p, local: moving.localVertices[i] })) : [];
+    var movingCentres = matchCentres ? movingEnds.points.map((p, i) => ({ point: p, local: movingEnds.locals[i] })) : [];
+
+    var best = null, bestDist = tolerance;
+    var children = app.level.children;
+    for (var i = 0; i < children.length; i++) {
+      var other = children[i];
+      if (other.isCube !== true || other === app.player || other === obj) continue;
+      if (this.exclusiveAction?.controlBlock === other) continue; // never snap to the (transient) multiselect control block
+
+      if (matchVertices) {
+        var points = app.util.getBlockEndPoints(other);
+        for (var m = 0; m < movingVertices.length; m++) {
+          var mc = movingVertices[m];
+          for (var t = 0; t < points.vertices.length; t++) {
+            var tp = points.vertices[t];
+            var d = Math.hypot(mc.point.x - tp.x, mc.point.y - tp.y, mc.point.z - tp.z);
+            if (d < bestDist) { bestDist = d; best = { moving: mc.point, local: mc.local, target: tp }; }
+          }
+        }
+      }
+      if (matchCentres) {
+        var otherEnds = app.util.getBlockEndCandidates(other);
+        for (var c = 0; c < movingCentres.length; c++) {
+          var mcc = movingCentres[c];
+          for (var t2 = 0; t2 < otherEnds.points.length; t2++) {
+            var tp2 = otherEnds.points[t2];
+            var d2 = Math.hypot(mcc.point.x - tp2.x, mcc.point.y - tp2.y, mcc.point.z - tp2.z);
+            if (d2 < bestDist) { bestDist = d2; best = { moving: mcc.point, local: mcc.local, target: tp2 }; }
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  // Type-restricted snap for the FAR end of an in-progress thin-build strip, restricted to the current
+  // `this.snapMode`: only far vertices are computed/compared in 'vertex' mode, only the far centre in 'centre'
+  // mode (never both). Builds a virtual block descriptor for what the strip would look like at the given
+  // origin/end, considers only its far-end vertices/centre (local x > 0 - the end actually being dragged, not
+  // the fixed origin end), and returns the world-space delta needed to align the closest same-type match, or
+  // null if none in range.
+  closestTypedFarEndSnap(originX, originY, endX, endY, z, width, exclude) {
+    var length = Math.hypot(endX - originX, endY - originY);
+    var angle = Math.atan2(endY - originY, endX - originX);
+    var centerX = 0.5 * (originX + endX), centerY = 0.5 * (originY + endY);
+
+    var virtual = {
+      position: new Vector3(centerX, centerY, z),
+      scale: { x: length, y: width, z: width },
+      rotation: new Euler(0, 0, angle, 'XYZ')
+    };
+    var matchVertices = this.snapMode === 'vertex';
+    var matchCentres = this.snapMode === 'centre';
+    var vPoints = app.util.getBlockEndPoints(virtual);
+    var farVertices = matchVertices ? vPoints.vertices.filter((p, i) => vPoints.localVertices[i].x > 0) : [];
+    var farCentres = matchCentres ? vPoints.endCentres.filter((p, i) => vPoints.localEndCentres[i].x > 0) : [];
+
+    var tolerance = app.BOX_SIZE * 0.5;
+    var best = null, bestDist = tolerance;
+    var children = app.level.children;
+    for (var i = 0; i < children.length; i++) {
+      var other = children[i];
+      if (other.isCube !== true || other === app.player || other === exclude) continue;
+      if (this.exclusiveAction?.controlBlock === other) continue;
+
+      if (matchVertices) {
+        var points = app.util.getBlockEndPoints(other);
+        for (var v = 0; v < farVertices.length; v++) {
+          for (var t = 0; t < points.vertices.length; t++) {
+            var d = farVertices[v].distanceTo(points.vertices[t]);
+            if (d < bestDist) { bestDist = d; best = points.vertices[t].clone().sub(farVertices[v]); }
+          }
+        }
+      }
+      if (matchCentres) {
+        var otherEnds = app.util.getBlockEndCandidates(other);
+        for (var c = 0; c < farCentres.length; c++) {
+          for (var t2 = 0; t2 < otherEnds.points.length; t2++) {
+            var d2 = farCentres[c].distanceTo(otherEnds.points[t2]);
+            if (d2 < bestDist) { bestDist = d2; best = otherEnds.points[t2].clone().sub(farCentres[c]); }
+          }
+        }
+      }
+    }
+    return best; // a Vector3 delta, or null
+  }
+
+  // Vertex/end-centre snap for a rigid translate (position only, no scale/rotation change) - considers every one of
+  // `obj`'s own vertices/end-centres against every other block's, and snaps to whichever pair is closest.
+  // Shared by the translate gizmo and Q drag-to-move (see keybinds.md ",").
+  applyClosestVertexSnap(obj) {
+    var match = this.closestVertexSnapMatch(obj);
+    if (match == null) return;
+    obj.setPosition({
+      x: obj.position.x + (match.target.x - match.moving.x),
+      y: obj.position.y + (match.target.y - match.moving.y),
+      z: obj.position.z + (match.target.z - match.moving.z)
+    });
+    obj.updateMatrixWorld();
+    obj.updateHelper();
+  }
+
+  // Vertex/end-centre snap for a scale drag: TransformControls scale is symmetric about the object's own center, so a
+  // matched vertex/end-centre is corrected by adjusting scale (not position), doubled since both sides of center move
+  // oppositely, along whichever local axes the matched point actually extends along, gated to the axis/axes of the
+  // active gizmo handle so snapping doesn't touch axes the user isn't dragging (see keybinds.md ",").
+  applyVertexSnapToScale(obj) {
+    var match = this.closestVertexSnapMatch(obj);
+    if (match == null) return;
+
+    var deltaWorld = new Vector3(match.target.x - match.moving.x, match.target.y - match.moving.y, match.target.z - match.moving.z);
+    var deltaLocal = deltaWorld.applyQuaternion(obj.quaternion.clone().invert());
+    var local = match.local;
+    var axis = this.controlsTransform.axis || 'XYZ';
+
+    if (local.x !== 0 && axis.includes('X')) obj.scale.x += 2 * deltaLocal.x * Math.sign(local.x);
+    if (local.y !== 0 && axis.includes('Y')) obj.scale.y += 2 * deltaLocal.y * Math.sign(local.y);
+    if (local.z !== 0 && axis.includes('Z')) obj.scale.z += 2 * deltaLocal.z * Math.sign(local.z);
+
+    obj.updateMatrixWorld();
+    obj.updateHelper();
+  }
+
+  // Vertex/end-centre snap for a putty drag. Dragging the line moves both endpoints together (a rigid translate,
+  // same closest-pair-of-all-vertices logic as the translate gizmo/Q-drag); dragging a single point only moves that
+  // one face-centre, so it alone is compared against every other block's vertices/end-centres (see keybinds.md ",").
+  applyVertexSnapToPutty() {
+    var putty = this.controlsPutty;
+    var pointObj = putty.activePoint;
+    var obj = app.selectedObject;
+    if (pointObj == null || obj == null) return;
+
+    if (pointObj.isLine) {
+      this.applyClosestVertexSnap(obj);
+      putty.updateHelper(); // re-derive pointA/pointB from the corrected object position
+      return;
+    }
+
+    var world = new Vector3();
+    pointObj.getWorldPosition(world);
+    var near = this.snapToNearestVertex(world, obj);
+    if (near == null) return;
+
+    var local = new Vector3(near.x, near.y, near.z);
+    pointObj.parent.worldToLocal(local);
+    pointObj.position.copy(local);
+    putty.updateLineFromPoints();
+    putty.updateObjectFromPoints();
+  }
+
+  // Snaps a placement/drag point to the nearest vertex/end-center (if vertex-snap is on and one's in range),
+  // else falls back to the plain grid snap - z is only ever moved by an actual vertex match (`snapZ`), never grid-snapped.
+  // When vertex-snap is on with no match, the point is used raw - grid-snap never runs as a fallback.
+  snapPoint(point, exclude, snapZ = false) {
+    if (this.snapMode !== 'normal') {
+      var near = this.snapToNearestVertex(point, exclude, !snapZ);
+      if (near) return { x: near.x, y: near.y, z: snapZ ? near.z : point.z };
+      return { x: point.x, y: point.y, z: point.z };
+    }
+    return {
+      x: app.mouse.snapToValue(point.x, app.mouse.snap),
+      y: app.mouse.snapToValue(point.y, app.mouse.snap),
+      z: point.z
+    };
+  }
+
+  // Vertex-snaps the current selection's position after a translate gizmo drag (overrides its built-in grid snap).
+  applyVertexSnapToSelection() {
+    this.applyClosestVertexSnap(app.selectedObject);
+  }
+
+  // ============================== "." Custom rotation pivot ==============================
+
+  // ".": arms custom-pivot placement; the next click resolves a 3D point which becomes the pivot (see keybinds.md).
+  armCustomPivot() {
+    if (this.canPerformEditorAction() == false) return;
+    this.startExclusiveAction('set-pivot', { cancel: () => this.endExclusiveAction() });
+  }
+
+  // Click while armed: resolve a 3D point on the current-Z plane and set it as the custom rotation pivot.
+  resolveCustomPivotClick(e) {
+    // Consumed exclusively for pivot placement - endExclusiveAction() below runs before Mouse.mouseUp's
+    // own pointerup listener fires, so this flag (not just isVanillaClickingSuppressed) stops that second
+    // listener from falling through to normal select/deselect handling on the same click.
+    e.editorClickHandled = true;
+    var point = app.mouse.getPositionOnPlane(e, this.currentZ);
+    if (point) this.setCustomPivot({ x: point.x, y: point.y, z: point.z });
+    this.endExclusiveAction();
+  }
+
+  setCustomPivot(point) {
+    this.customPivot = point;
+    this.showPivotMarker();
+    window.dispatchEvent(new CustomEvent('customPivotSet', { detail: point }));
+    // Re-attach immediately so an already-active rotate gizmo picks up the new pivot without reselecting.
+    if (this.selectedMode === 'rotate' && app.selectedObject) this.attachControls(app.selectedObject);
+  }
+
+  // Clears the custom pivot: on deselect, or once a non-rotate transform actually completes (see keybinds.md).
+  clearCustomPivot() {
+    if (this.customPivot == null) return;
+    this.customPivot = null;
+    this.hidePivotMarker();
+    window.dispatchEvent(new CustomEvent('customPivotCleared'));
+    // Falling back to the object's own origin/group bbox center needs a normal (non-proxy) re-attach.
+    if (app.selectedObject) this.attachControls(app.selectedObject);
+  }
+
+  ensurePivotMarker() {
+    if (this.pivotMarkerMesh) return this.pivotMarkerMesh;
+    var geometry = new SphereGeometry(3, 12, 12);
+    var material = new MeshBasicMaterial({ color: '#ffaa00' });
+    var mesh = new Mesh(geometry, material);
+    mesh.visible = false;
+    app.scene.add(mesh);
+    this.pivotMarkerMesh = mesh;
+    return mesh;
+  }
+
+  showPivotMarker() {
+    var mesh = this.ensurePivotMarker();
+    mesh.position.set(this.customPivot.x, this.customPivot.y, this.customPivot.z);
+    mesh.visible = true;
+    mesh.updateMatrixWorld();
+  }
+
+  hidePivotMarker() {
+    if (this.pivotMarkerMesh) this.pivotMarkerMesh.visible = false;
+  }
+
+  // Remaps the real rotate target from the invisible pivot proxy's accumulated rotation (reuses the multiselect group-rotation math).
+  updatePivotRotation() {
+    var proxy = this.pivotProxy;
+    var target = this.pivotProxyTarget;
+    var snap = this.pivotProxySnapshot;
+    var rel = this.rotatePointForGroup(snap.x - proxy.position.x, snap.y - proxy.position.y, snap.z - proxy.position.z, proxy.rotation);
+
+    target.setPosition({ x: rel[0] + proxy.position.x, y: rel[1] + proxy.position.y, z: rel[2] + proxy.position.z }, true);
+    target.setRotation({ x: snap.rx + proxy.rotation.x, y: snap.ry + proxy.rotation.y, z: snap.rz + proxy.rotation.z }, true);
+    target.updateMatrixWorld();
+    target.updateHelper();
+  }
+
   updateRender() {
     // Only force render level editor if app is paused
     if (app.state == 'level-editor' && app.play == false) {
@@ -944,12 +1322,14 @@ class LevelEditor {
 
     // Update snap settings for putty controls
     this.controlsPutty.moved = false;
-    this.controlsPutty.snap = app.mouse.snap;
-    
+    // Vertex/end snap overrides putty's own built-in grid snap while active (applied post-drag, see objectChange above).
+    this.controlsPutty.snap = this.snapMode !== 'normal' ? null : app.mouse.snap;
+
     // Update transform controls snap settings
     this.controlsTransform.moved = false;
-    this.controlsTransform.setTranslationSnap(app.mouse.snap);
-    this.controlsTransform.setScaleSnap(app.mouse.snap);
+    // Vertex/end snap overrides the gizmo's built-in grid translation/scale snap while active (applied post-drag, see objectChange above).
+    this.controlsTransform.setTranslationSnap(this.snapMode !== 'normal' ? null : app.mouse.snap);
+    this.controlsTransform.setScaleSnap(this.snapMode !== 'normal' ? null : app.mouse.snap);
     this.controlsTransform.setRotationSnap(app.mouse.snap > 1 ? (Math.PI / 12) : null); // 15 degrees or granular (null)
   }
 
@@ -995,6 +1375,7 @@ class LevelEditor {
             this.controlsOrbit.moved == false &&
             this.controlsPutty.moved == false) {
             app.level.deselectLevel();
+            this.clearCustomPivot(); // switching selection clears any custom pivot from the previous block
             app.selectedObject = target;
             app.selectedObject.select(true);
             this.attachControls(target);
@@ -1008,15 +1389,12 @@ class LevelEditor {
           // Add a new object if camera did not move
           if (this.controlsOrbit.moved == false && this.isSnapped()) {
             var objectType = this.selectedObjectType;
+            var placePos = this.snapPoint({ x: app.mouse.down.x, y: app.mouse.down.y, z: this.currentZ }, null, true);
             var objectData = {
               class: objectType,
               color: app.level.entityFactory.color,
               isStatic: true,
-              position: {
-                x: app.mouse.snapToValue(app.mouse.down.x, app.mouse.snap),
-                y: app.mouse.snapToValue(app.mouse.down.y, app.mouse.snap),
-                z: this.currentZ
-              },
+              position: { x: placePos.x, y: placePos.y, z: placePos.z },
               rotation: { x: 0, y: 0, z: 0 },
               scale: { x: app.BOX_SIZE, y: app.BOX_SIZE, z: app.BOX_SIZE }
             };
@@ -1039,6 +1417,7 @@ class LevelEditor {
           this.isSnapped()) {
           app.level.deselectLevel();
           this.detachControls();
+          this.clearCustomPivot(); // deselecting clears any custom pivot (see keybinds.md "." details)
           window.dispatchEvent(new CustomEvent('setSelectedObject'));
         }
       }
@@ -1058,6 +1437,7 @@ class LevelEditor {
 
     app.level.deselectLevel();
     this.detachControls();
+    this.clearCustomPivot(); // deselecting clears any custom pivot (see keybinds.md "." details)
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
@@ -1169,7 +1549,7 @@ class LevelEditor {
 
   // Cutter click while cut-out is armed: performs the cut immediately (single click, no confirm step).
   cutOutPointerUp(e) {
-    e.cutOutHandled = true;
+    e.editorClickHandled = true;
     var action = this.exclusiveAction;
     var cutter = app.mouse.clickObject(e);
     if (cutter == null || cutter === action.target) {
@@ -1269,6 +1649,232 @@ class LevelEditor {
     }));
   }
 
+  // ============================== "P" Chain physics ==============================
+  // Reuses "M" multiselect's box-select/refine staging end to end (same exclusiveAction name 'multiselect',
+  // purpose 'chain' - see startMultiselect()): "P" arms box-select, drag a box, "C" confirms into refine
+  // (add/remove individual blocks by click), "C" again confirms into anchor-marking (click a selected block
+  // to flag/unflag it as a static anchor, default dynamic), "C" a third time finalizes - builds the Matter
+  // constraints/visuals scoped to just this selection (see Level.buildChainLinksForCandidates) and ends. "V"/Escape cancels at any stage.
+
+  armChainMode() {
+    if (this.canPerformEditorAction() == false) return;
+    this.startMultiselect('chain');
+  }
+
+  isChainAnchorStage() {
+    return this.exclusiveAction?.name === 'multiselect' && this.exclusiveAction.purpose === 'chain' && this.exclusiveAction.stage === 'anchor';
+  }
+
+  // Stage 3 (chain purpose only): the confirmed box/refine selection becomes the chain's candidate blocks.
+  enterChainAnchorStage() {
+    var action = this.exclusiveAction;
+    if (action.selected.length === 0) return; // nothing captured: stay put
+
+    this.setExclusiveActionStage('anchor');
+    action.confirm = () => this.confirmChain();
+    action.cancel = () => this.cleanupMultiselect();
+    this.setOrbitLeftEnabled(true); // left-click toggles anchor flag, left-drag pans the camera (same as refine)
+    // Re-tag every selected block's highlight from the plain white/cyan selection color to chain's dynamic (cyan) color.
+    action.selected.forEach(obj => this.highlightChainBlock(obj, false));
+  }
+
+  chainAnchorPointerUp(e) {
+    if (this.controlsOrbit.moved || this.isSnapped() == false) return; // ignore camera drags/pans, same click-tolerance convention as refine
+    var target = app.mouse.clickObject(e);
+    if (target == null || target === app.player) return;
+
+    var action = this.exclusiveAction;
+    if (action.selected.indexOf(target) === -1) return; // only candidates from the confirmed selection can be flagged
+
+    var isAnchor;
+    if (action.anchors.has(target)) { action.anchors.delete(target); isAnchor = false; }
+    else { action.anchors.add(target); isAnchor = true; }
+    this.highlightChainBlock(target, isAnchor);
+    this.updateRender();
+  }
+
+  // Orange = anchor, cyan = dynamic - reuses multiselect's highlight-color-swap mechanism/bookkeeping (_msOriginalColor).
+  highlightChainBlock(obj, isAnchor) {
+    if (obj._msOriginalColor == null) obj._msOriginalColor = obj.color;
+    obj.setColors(isAnchor ? '#ff8800' : '#00ffff', false);
+    obj.updateMatrixWorld();
+  }
+
+  // "C" (3rd press): sets every selected block's static/dynamic state (dynamic by default, static if flagged
+  // anchor - regardless of the block's own prior static/dynamic setting), then builds temporary constraints
+  // scoped to just this selection (see Level.buildChainLinksForCandidates - chain membership is exactly the
+  // blocks run through this "P" flow, not level-wide). If any pair actually linked, the selection is settled
+  // invisibly under gravity and baked into static geometry (see settleChainAndBake) - this is a one-time
+  // level-authoring aid, not a persistent feature, so nothing chain-related survives past this call other
+  // than the blocks' final settled positions. If nothing linked, there's nothing to settle - same as before.
+  confirmChain() {
+    var action = this.exclusiveAction;
+    var blocks = action.selected;
+
+    if (blocks.length < 2) {
+      this.cleanupMultiselect();
+      return;
+    }
+
+    blocks.forEach(obj => obj.setStatic(action.anchors.has(obj)));
+    var { constraints } = app.level.buildChainLinksForCandidates(blocks);
+
+    if (constraints.length === 0) {
+      app.levelHistory.save('Created chain');
+      this.cleanupMultiselect();
+      return;
+    }
+
+    // Block re-entrancy (stray "C"/"V"/Escape presses) while the settle simulation is running below.
+    action.confirm = () => {};
+    action.cancel = () => {};
+    this.settleChainAndBake(blocks, constraints);
+  }
+
+  // Runs the chain's confirmed candidates forward through Matter in a single synchronous loop (Matter can
+  // step a handful of bodies hundreds of times in milliseconds, so there's no need to spread this across
+  // animation frames), with the camera frozen and the blocks hidden (obj.visible, not Cube.hide()/freeze() -
+  // that also sleeps/disables collision on the body, which would stop the very simulation we want to run).
+  // Chain-linked blocks start out exactly coincident at their shared link points by design, so give them a
+  // shared negative collisionFilter.group for the duration of the settle - otherwise Matter's own rigid-body
+  // collision resolution fights the pin constraints holding those same points together, which is degenerate
+  // enough to crash Matter's SAT code (_findSupports). Restored after baking (see finishChainSettle). Stops
+  // once either the simulated step cap is hit or every dynamic candidate's speed has stayed below threshold
+  // for several consecutive checks, then bakes the settled result (see finishChainSettle).
+  settleChainAndBake(blocks, constraints) {
+    var tuning = CHAIN_SETTLE_TUNING;
+    var dynamicBlocks = blocks.filter(obj => obj.isStatic() == false);
+
+    var chainCollisionGroup = -(++chainSettleGroupCounter);
+    blocks.forEach(obj => {
+      obj._chainOriginalCollisionGroup = obj.body.collisionFilter.group;
+      obj.body.collisionFilter.group = chainCollisionGroup;
+    });
+
+    blocks.forEach(obj => obj.visible = false);
+    this.setOrbitInteractionEnabled(false);
+    this.showChainSettleOverlay();
+
+    // Chain-linked pairs are exactly (within 1e-6) coincident at their shared points by design (see
+    // linkBlockPair) - nudge each dynamic block's body a hair off that shared point, in a distinct direction
+    // per block, before the solver ever runs. The constraints' local point offsets already matched the
+    // un-nudged geometry (buildChainLinksForCandidates ran before this), so this can't affect which ends got
+    // linked - it just keeps the very first solve step off an exact zero-distance edge case.
+    dynamicBlocks.forEach((obj, i) => {
+      var sign = (i % 2 === 0) ? 1 : -1;
+      var offset = sign * (i + 1) * 0.0005;
+      Body.setPosition(obj.body, { x: obj.body.position.x + offset, y: obj.body.position.y + offset });
+    });
+
+    // Give dynamic blocks volume-based mass so scale.z (depth) affects settle behavior, not just 2D area
+    dynamicBlocks.forEach(obj => {
+      Body.setMass(obj.body, Math.abs(obj.scale.x * obj.scale.y * obj.scale.z));
+    });
+
+    var stepsRun = 0, stableFrames = 0;
+    while (stepsRun < tuning.totalSteps && stableFrames < tuning.stableFramesNeeded) {
+      Engine.update(app.engine, tuning.timestep);
+      stepsRun++;
+
+      var maxSpeed = 0;
+      dynamicBlocks.forEach(obj => maxSpeed = Math.max(maxSpeed, obj.body.speed));
+      stableFrames = (maxSpeed < tuning.speedThreshold) ? stableFrames + 1 : 0;
+    }
+
+    this.finishChainSettle(blocks, constraints);
+  }
+
+  // Bakes the settled simulation into permanent static geometry: reads each block's final body transform
+  // (same y-flip/angle-negation convention as Cube.update()'s per-frame alpha interpolation, here effectively
+  // alpha=1 since the settle loop above already finished), sets it as the block's new saved origin
+  // (updateOrigin=true - unlike the updateOrigin=false calls used elsewhere for temp/preview purposes, we
+  // explicitly want this baked in for good), freezes it static, removes the now-unneeded temporary
+  // constraints, then restores the camera/visibility and tears down like a normal multiselect confirm.
+  finishChainSettle(blocks, constraints) {
+    constraints.forEach(constraint => World.remove(app.engine.world, constraint));
+
+    blocks.forEach(obj => {
+      var settledPosition = { x: obj.body.position.x, y: -obj.body.position.y, z: obj.position.z };
+      var settledRotation = -obj.body.angle;
+      obj.setPosition(settledPosition, true);
+      obj.setRotation(settledRotation, true);
+      obj.setStatic(true);
+      obj.visible = true;
+      obj.body.collisionFilter.group = obj._chainOriginalCollisionGroup ?? 0;
+      delete obj._chainOriginalCollisionGroup;
+    });
+
+    this.hideChainSettleOverlay();
+    this.setOrbitInteractionEnabled(true);
+    // Every candidate's own origin now holds its final baked position/rotation/scale/static state (above) -
+    // resetLevel() cleanly returns the whole level (chain blocks and everything else) to that baseline,
+    // zeroing velocity/angular velocity, same as any normal level-restart (see Level.resetLevel).
+    app.level.resetLevel();
+    app.levelHistory.save('Created chain');
+    this.cleanupMultiselect();
+  }
+
+  // ----- Chain settle loading overlay (a plain DOM overlay - mirrors ensureMarqueeElement's raw-DOM pattern,
+  // no Vue involved) - translucent, no buttons/interaction, just animated white "Loading..." text. Class
+  // 'popup' piggybacks on the existing isEditorPopupOpen() gate (see canPerformEditorAction/canConfirmAction)
+  // so no other editor action can start while it's showing, on top of the action.confirm/cancel no-ops above. -----
+
+  ensureChainSettleOverlay() {
+    if (this.chainSettleOverlay) return this.chainSettleOverlay;
+    var el = document.createElement('div');
+    el.className = 'popup';
+    el.style.position = 'fixed';
+    el.style.inset = '0';
+    el.style.display = 'none';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.background = 'rgba(0, 0, 0, 0.5)';
+    el.style.zIndex = '9999';
+    el.style.pointerEvents = 'none';
+    var text = document.createElement('div');
+    text.style.color = '#ffffff';
+    text.style.fontSize = '1.5em';
+    text.style.fontFamily = 'Comfortaa-Bold'; // match the app's standard UI font (.ui-origin), not appended inside it
+    document.body.appendChild(el);
+    el.appendChild(text);
+    this.chainSettleOverlay = el;
+    this.chainSettleOverlayText = text;
+    return el;
+  }
+
+  showChainSettleOverlay() {
+    var el = this.ensureChainSettleOverlay();
+    el.style.display = 'flex';
+    var dots = 0;
+    this.chainSettleOverlayText.textContent = 'Loading';
+    this.chainSettleOverlayInterval = setInterval(() => {
+      dots = (dots + 1) % 4;
+      this.chainSettleOverlayText.textContent = 'Loading' + '.'.repeat(dots);
+    }, 400);
+  }
+
+  hideChainSettleOverlay() {
+    if (this.chainSettleOverlay) this.chainSettleOverlay.style.display = 'none';
+    if (this.chainSettleOverlayInterval) { clearInterval(this.chainSettleOverlayInterval); this.chainSettleOverlayInterval = null; }
+  }
+
+  // Checkpoint property panel "Set as start position" button: session-only playtest override, never serialized
+  // (see keybinds.md and playCurrentLevel() in OriginPageLevelEditor.vue).
+  setTempSpawnFromCheckpoint(checkpoint) {
+    if (checkpoint == null || checkpoint.getClass() !== 'checkpoint') return;
+    this.tempSpawnPosition = { x: checkpoint.position.x, y: checkpoint.position.y, z: checkpoint.position.z };
+    this.tempSpawnRotation = { x: checkpoint.rotation.x, y: checkpoint.rotation.y, z: checkpoint.rotation.z };
+  }
+
+  // Re-applies the temp spawn override (if any) to the live player position/rotation - used on initial play
+  // and on every Retry so "R" respects it too. updateOrigin=false keeps this session-only, never touching
+  // the player's real positionOrigin/rotationOrigin (the values that actually get serialized to level JSON).
+  applyTempSpawn() {
+    if (this.tempSpawnPosition == null) return;
+    app.player.setPosition(this.tempSpawnPosition, false);
+    app.player.setRotation(this.tempSpawnRotation, false);
+  }
+
   // "B,B"/"B,N": flip the selection across its own XZ/YZ plane; never falls back to app.selectedObject during multiselect since it's stale once M is active.
   flipSelection(plane) {
     if (this.exclusiveAction?.name === 'multiselect') {
@@ -1351,6 +1957,7 @@ class LevelEditor {
     this.controlsOrbit.enabled = false;
     this.controlsOrbit.reset();
     this.detachControls();
+    this.clearCustomPivot(); // don't carry a stale pivot/proxy into the next editor session
     app.play = false;
     if (saveLevel == true) this.saveLevel();
     app.level.clearLevel();
@@ -1374,7 +1981,8 @@ class LevelEditor {
   }
 
   rewind() {
-    app.level.retryLevel(true);
+    // Exiting to a clean edit state - never re-teleport to the temp spawn override here
+    app.level.retryLevel(true, false);
     app.level.deselectLevel();
     app.levelEditor.detachControls();
     app.pauseLevel();
@@ -1479,12 +2087,42 @@ class LevelEditor {
 
   attachControls(target) {
     if (!target) return;
-    this.controlsTransform.attach(target);
-    this.controlsPutty.attach(target);
+    // Rotate mode with a custom pivot set: attach the gizmo to an invisible proxy at the pivot instead of the
+    // object itself, then remap the real object from the proxy's rotation each frame (see updatePivotRotation()).
+    var usePivotProxy = this.selectedMode === 'rotate' && this.customPivot != null && target === app.selectedObject && this.isMultiselectTransform() == false;
+    if (usePivotProxy) this.attachPivotProxy(target);
+    else {
+      this.detachPivotProxy();
+      this.controlsTransform.attach(target);
+      this.controlsPutty.attach(target);
+    }
     this.applyControlsModeState();
   }
 
+  attachPivotProxy(target) {
+    if (this.pivotProxy == null) {
+      this.pivotProxy = new Object3D();
+      app.scene.add(this.pivotProxy);
+    }
+    this.pivotProxy.position.set(this.customPivot.x, this.customPivot.y, this.customPivot.z);
+    this.pivotProxy.rotation.set(0, 0, 0);
+    this.pivotProxy.updateMatrixWorld();
+    this.pivotProxyTarget = target;
+    this.pivotProxySnapshot = {
+      x: target.position.x, y: target.position.y, z: target.position.z,
+      rx: target.rotation.x, ry: target.rotation.y, rz: target.rotation.z
+    };
+    this.controlsPutty.detach();
+    this.controlsTransform.attach(this.pivotProxy);
+  }
+
+  detachPivotProxy() {
+    this.pivotProxyTarget = null;
+    this.pivotProxySnapshot = null;
+  }
+
   detachControls() {
+    this.detachPivotProxy();
     this.controlsTransform.detach();
     this.controlsPutty.detach();
     this.applyControlsModeState();
@@ -1650,13 +2288,16 @@ class LevelEditor {
   }
 
   // Claims the exclusive-action slot for a multi-step editor action; `confirm`/`cancel` default to releasing the slot.
-  startExclusiveAction(name, { confirm, cancel } = {}) {
+  // `purpose` optionally distinguishes an action reusing another's mechanism for a different end result
+  // (e.g. "P" chain reuses the "multiselect" name/staging but sets purpose 'chain' - see armChainMode()).
+  startExclusiveAction(name, { confirm, cancel, purpose } = {}) {
     this.exclusiveAction = {
       name: name,
+      purpose: purpose || null,
       confirm: confirm || (() => this.endExclusiveAction()),
       cancel: cancel || (() => this.endExclusiveAction())
     };
-    window.dispatchEvent(new CustomEvent('levelEditorActionStarted', { detail: { name } }));
+    window.dispatchEvent(new CustomEvent('levelEditorActionStarted', { detail: { name, purpose: purpose || null } }));
     return this.exclusiveAction;
   }
 
