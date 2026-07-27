@@ -33,7 +33,7 @@
     <div class="fancy-popup" v-if="modelValue">
       <div class="background" @click="close"></div>
       <div class="content" :style="{ width: size + 'vh', height: size + 'vh' }">
-        <h1 class="title" v-if="title">{{ title }}</h1>
+        <div class="title" v-if="title">{{ title }}</div>
         <slot></slot>
         <a class="close" @click="close" v-if="closeButton">&times;</a>
       </div>

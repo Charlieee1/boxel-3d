@@ -16,6 +16,7 @@ v2.9.3-m1.2.0
 - Added determinstic mode
 - Added death block property
 - Added opacity property
+- Added reset block properties
 - Added theme customization
 - Added more settings
 - Added level properties

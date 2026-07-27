@@ -10,7 +10,8 @@ const DEFAULT_RESET_CONFIG = {
   resetVelocity: false,
   resetAngularVelocity: false,
   resetPlayerCheckpoint: false,
-  resetInfiniteJumpMode: true
+  resetInfiniteJumpMode: true,
+  resetGravity: true
 };
 
 class Reset extends Cube {
