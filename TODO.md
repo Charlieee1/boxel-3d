@@ -4,11 +4,7 @@
 - Plugins
 - Group modify (be able to change many models at once)
 - Gameplay/deco layers
-- New UI settings in level editor
 - Level editor guide
-
-# Extra level editor functionality
-- Reset block being able to reset specific properties instead of all
 
 # Settings
 - External resources

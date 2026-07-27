@@ -1014,7 +1014,7 @@
         </div>
       </div>
     </FancyPopup>
-    <FancyPopup v-model="resetPropertiesPopupVisible" title="Reset Block Properties" v-if="selectedObject">
+    <FancyPopup v-model="resetPropertiesPopupVisible" title="Reset Block Properties" class="reset-properties-popup" v-if="selectedObject">
       <div class="level-properties reset-properties" v-if="selectedObject.getClass() === 'reset'">
         <div class="property-row">
           <span class="label">Size</span>
@@ -1047,6 +1047,10 @@
         <div class="property-row">
           <span class="label">Infinite Jump Mode</span>
           <input type="checkbox" :checked="selectedObject.getResetConfig().resetInfiniteJumpMode" @change="updateResetConfig('resetInfiniteJumpMode', $event)">
+        </div>
+        <div class="property-row">
+          <span class="label">Gravity</span>
+          <input type="checkbox" :checked="selectedObject.getResetConfig().resetGravity" @change="updateResetConfig('resetGravity', $event)">
         </div>
       </div>
     </FancyPopup>

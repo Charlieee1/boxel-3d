@@ -902,7 +902,15 @@
     "revisions": [
       "Fixed bugs",
       "Force set canjump to true at start of every level",
-      "Enable main level pack by default"
+      "Enable main level pack by default",
+      "Added determinstic mode",
+      "Added death block property",
+      "Added opacity property",
+      "Added reset block properties",
+      "Added theme customization",
+      "Added more settings",
+      "Added level properties",
+      "Delete old ui"
     ]
   }
 ]
