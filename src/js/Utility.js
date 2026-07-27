@@ -1,6 +1,9 @@
 import { Capacitor } from '@capacitor/core';
 import { Matrix4, Quaternion, Vector3 } from 'three';
 
+// Shared across all Utility instances so the same asset is only ever fetched once
+const _inlineSvgCache = {};
+
 const _unitScale = new Vector3(1, 1, 1);
 // Local (unrotated) half-scale offsets for the 8 corners, shared by vertex/end snapping and chain-link detection.
 const _localCorners = [
@@ -47,8 +50,84 @@ class Utility {
     return { points: [obj.position.clone()], locals: [{ x: 0, y: 0, z: 0 }] };
   }
 
-  randomNumber(min, max) {  
-    return Math.random() * (max - min) + min; 
+  randomNumber(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  // Hex colour between two hex colours at the given ratio (0 = hexA, 1 = hexB, 0.5 = midpoint), used for the
+  // theme's dynamic icon highlight default and for deriving shaded/tinted variants of theme colours
+  hexMidpoint(hexA, hexB, ratio = 0.5) {
+    var a = parseInt(hexA.replace('#', ''), 16);
+    var b = parseInt(hexB.replace('#', ''), 16);
+    var r = Math.round((a >> 16 & 0xFF) + ((b >> 16 & 0xFF) - (a >> 16 & 0xFF)) * ratio);
+    var g = Math.round((a >> 8 & 0xFF) + ((b >> 8 & 0xFF) - (a >> 8 & 0xFF)) * ratio);
+    var bl = Math.round((a & 0xFF) + ((b & 0xFF) - (a & 0xFF)) * ratio);
+    return '#' + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
+  }
+
+  // Hex -> [h(0-360), s(0-100), l(0-100)]
+  hexToHsl(hex) {
+    var value = parseInt(hex.replace('#', ''), 16);
+    var r = (value >> 16 & 0xFF) / 255, g = (value >> 8 & 0xFF) / 255, b = (value & 0xFF) / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+
+    if (max == min) { h = s = 0; }
+    else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        case b: h = (r - g) / d + 4; break;
+      }
+      h /= 6;
+    }
+
+    return [h * 360, s * 100, l * 100];
+  }
+
+  // [h(0-360), s(0-100), l(0-100)] -> hex
+  hslToHex(h, s, l) {
+    h = ((h % 360) + 360) % 360 / 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    var r, g, b;
+
+    if (s == 0) { r = g = b = l; }
+    else {
+      var hue2rgb = function(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      };
+      var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      var p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+
+    var toHex = function(c) { return Math.round(c * 255).toString(16).padStart(2, '0'); };
+    return '#' + toHex(r) + toHex(g) + toHex(b);
+  }
+
+  // Shifts a hex colour's hue/saturation/lightness by the given deltas (in HSL, not RGB) - used to derive
+  // gradient/shade tones from a single base theme colour without the muddy-brown look that comes from
+  // mixing toward black/white in RGB space
+  shadeHex(hex, deltaH = 0, deltaS = 0, deltaL = 0) {
+    var hsl = this.hexToHsl(hex);
+    return this.hslToHex(hsl[0] + deltaH, hsl[1] + deltaS, hsl[2] + deltaL);
+  }
+
+  // Hex colour + 0-1 opacity to an rgba() string, for CSS variables that pre-composite colour and opacity
+  hexToRgba(hex, alpha) {
+    var value = parseInt(hex.replace('#', ''), 16);
+    var r = value >> 16 & 0xFF, g = value >> 8 & 0xFF, b = value & 0xFF;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
   
   getVectorFromAngle(angle = 0, decimal = 1) {
@@ -94,6 +173,15 @@ class Utility {
 
   isFullscreen() {
     return document.fullscreenElement != null;
+  }
+
+  // Fetches an svg's raw markup for inline (v-html) embedding, so CSS custom properties inside it can pick up
+  // theme colours - a plain <img>/background-image url() can't see the host page's CSS variables
+  async getInlineSvg(url) {
+    if (_inlineSvgCache[url] == null) {
+      _inlineSvgCache[url] = fetch(url).then(function(response) { return response.text(); });
+    }
+    return _inlineSvgCache[url];
   }
 
   openLink(url, target = '_blank') {

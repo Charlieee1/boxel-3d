@@ -2,9 +2,10 @@
   import { ref, onBeforeMount, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Utility } from '../js/Utility.js';
-  import BubbleButtonSettings from './BubbleButtonSettings.vue';
-  import BubbleCarousel from './BubbleCarousel.vue';
-  import BubblePopupLevelSelector from './BubblePopupLevelSelector.vue';
+  import ButtonSettings from './ButtonSettings.vue';
+  import Carousel from './Carousel.vue';
+  import MenuBackground from './MenuBackground.vue';
+  import PopupLevelSelector from './PopupLevelSelector.vue';
   import { levels, themes } from '../js/Data.js';
 
   // Initialize variables
@@ -195,7 +196,7 @@
 <template>
   <div class="page">
     <div class="background">
-      <img :src="'./svg/background-purple.svg'">
+      <MenuBackground />
     </div>
     <div class="nav">
       <a class="button fade-in" @click="exitLevelPicker" :title="i18n.t('level_picker.button.exit')">
@@ -207,12 +208,12 @@
       <a class="button fade-in" @click="openDiscord" :title="i18n.t('level_picker.button.discord')">
         <img :src="'./svg/discord.svg'">
       </a>
-      <BubbleButtonSettings class="button fade-in" />
+      <ButtonSettings class="button fade-in" />
     </div>
     <div class="content fade-in">
       <h1>{{ i18n.t('level_picker.title') }}</h1>
       <p v-html="description"></p>
-      <BubbleCarousel
+      <Carousel
         :items="items"
         :selected="selectedItem"
         :hideTitle="true"
@@ -227,7 +228,7 @@
       </div>
     </div>
 
-    <BubblePopupLevelSelector />
+    <PopupLevelSelector />
   </div>
 </template>
 

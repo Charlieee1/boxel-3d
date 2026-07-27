@@ -89,7 +89,7 @@ Flipping works on both single blocks and multiselect groups. Use a **chord** (tw
 Press **N** (with no pending B chord) to toggle force-build mode. While active:
 - **Click on top of an existing block** → places a new block there instead of selecting the existing one
 - The existing block is left untouched
-- Shift+click copy-color is unavailable while force-build is on (clicking always builds instead)
+- Shift+click copy-color is unavailable while force-build is on (clicking always builds instead) - this also copies opacity now, see "Property Edits (Toolbar)" below
 - Press **N** again to turn it off
 
 Note: if you press **B** first (starting the flip chord), the next **N** completes the **B, N** flip instead of toggling force-build.
@@ -102,15 +102,17 @@ Press **Shift+N** to deselect the currently selected block - the same as clickin
 
 ---
 
-## Default Block Colour
+## Level Properties
 
-A color swatch in the toolbar (next to the theme picker) sets the default color used for newly-placed blocks:
+Click the **Level Properties** icon in the top toolbar (right of the Current Z textbox, left of Settings) to open a popup of level-wide properties. Every field applies immediately as you change it - there's no separate save step, and each change is its own undo/redo entry. Each row has a trash icon that resets that property back to its default.
 
-- **Click the swatch** to open the color picker and choose a new default block color
-- Applies to **new blocks only** - existing blocks in the level keep their current colors and are not retroactively recolored
-- Overrides the current theme's default color for new blocks until changed
-- **Saved with the level** (not a global/session setting) - it persists in the level file and is restored when the level is reopened
-- Switching themes keeps your custom default color if one is set; otherwise the swatch reflects the new theme's default color
+| Property | Control | Default | What it does |
+|---|---|---|---|
+| **Zoom** | Slider (80-280) | 180 | The level's default camera distance - used when entering/playing the level and by the **[** camera-reset key. A playthrough is only eligible for a verified run if its zoom matches this value (or 180 if unset), the same way debug mode invalidates a run |
+| **Theme** | Dropdown | classic | Switches the level's visual theme and recolors any blocks still using the previous theme's default color - same behavior as before, just relocated into this popup |
+| **Default Block Color** | Color picker | current theme's color | Sets the color newly-placed blocks use; existing blocks are not retroactively recolored. Persists with the level and survives theme switches until cleared (this replaces the old standalone toolbar color swatch) |
+| **Disable Manual Respawn** | Checkbox | Off | When on, silently blocks the player's manual respawn-to-checkpoint (the **C** key / checkpoint button during play). Automatic respawn after death is unaffected - this only gates the manual, player-triggered kind |
+| **Level UI Text** | Textarea | Empty | Overlay text/HTML shown on screen while playtesting or playing the level (hidden while editing). Rendered via `innerHTML`, so tags like `<b>` or `<br>` work |
 
 ---
 
@@ -191,6 +193,17 @@ Handy for lining up ramps, stacking blocks corner-to-corner, or butting two bloc
 
 ---
 
+## Editor Settings (Grid & Snap Increment)
+
+Two settings live in **Settings → General**, but only appear while you're in the level editor or level manager:
+
+- **Editor Snap** - the base grid increment (0-16, in steps of 4) that placement/dragging snaps to when Vertex/Centre Snap above isn't active. A value of 0 is coerced to 1
+- **Show Grid** - toggles a visible grid overlay on the current Z plane, drawn at the level's block size (16 units) per cell, so you can see the placement grid instead of only feeling it
+
+Both are editor-only - neither has any effect during actual gameplay.
+
+---
+
 ## Custom Rotation Pivot
 
 By default, rotating a block spins it around its own center (or, for a multiselect group, around the group's center). You can override this with a custom pivot point:
@@ -261,18 +274,70 @@ Useful for quickly testing a specific section of a level without playing through
 - All newly placed blocks will spawn at this height
 - Press **0** while a block is selected to reset the spawn plane to that block's Z
 
+### Block Properties Panel
+When a block is selected, the left toolbar column shows two groups separated by a thin line: **properties** on top, **operations** (transform/duplicate/delete) below. Which property controls appear depends on the selected block's type:
+
+| Block Type | Pin | Color | Friction | Opacity | Text | Death Block | Extra |
+|---|---|---|---|---|---|---|---|
+| Cube | Yes | Yes | Yes | Yes | No | Yes | - |
+| Tip | Yes | Yes | No | Yes | Yes | No | - |
+| Bounce | Yes | Yes | Yes | Yes | No | No | - |
+| Checkpoint | Yes | Yes | No | Yes | No | No | Set as start position |
+| Spike | Yes | Yes | Yes | Yes | No | No | - |
+| Resize | Yes | Yes | No | Yes | No | No | - |
+| Direction | Yes | Yes | Yes | Yes | No | No | - |
+| Gravity | Yes | Yes | No | Yes | No | No | - |
+| Grapple | Yes | Yes | Yes | Yes | No | No | - |
+| Finish | Yes | Yes | Yes | Yes | No | No | - |
+| Reset | Yes | Yes | No | Yes | No | No | Reset Properties button |
+| Control | Yes | Yes | No | Yes | No | No | - |
+| Power | Yes | Yes | No | Yes | No | No | - |
+| Teleport | Yes | Yes | No | Yes | Yes | No | - |
+| Player | No | No | Yes | Yes | No | No | - |
+
+Operations (translate/scale/rotate/putty/duplicate/delete) are always shown for every type once a block is selected.
+
 ### Transform Mode Buttons
 - **Toolbar icons** (translate/scale/rotate/putty) can be clicked instead of pressing keys
 - **Shift** while rotating locks to a single axis (same as holding Shift during rotation)
 
 ### Friction Slider
 - **Drag the slider** next to the friction icon to set block friction (0 to 1, in steps of 0.25)
-- Only available when a block is selected
+- Only available when a block is selected and its type shows Friction in the table above
 - Disabled if the block is pinned (static)
+
+### Opacity Slider
+- **Drag the slider** next to the opacity icon to set block transparency (0 to 1, in steps of 0.01) - 0 is fully invisible, 1 is fully opaque
+- Available for every block type, including the player
+- Shift+click copy-color (see "Force Build" above) also copies opacity from the source block onto the target
+
+### Death Block Toggle
+- **Click the skull icon** to toggle a Cube block into a death block - Cube-only, hidden for every other block type
+- A death block's hitbox becomes a sensor: touching it kills the player instantly instead of colliding physically
+- Only takes effect for blocks placed at Z = 0 (same as normal collision blocks) - off-plane death blocks behave like any other decorative block
 
 ### Pin Button
 - **Click the pin icon** to toggle whether a block is static (pinned)
 - Static blocks don't fall and can't be pushed by the player
+
+---
+
+## Reset Block Properties
+
+Select a **Reset** block and click the gear icon in its properties row to open the **Reset Block Properties** popup - a checklist of exactly what that reset block resets when the player touches it. Each checkbox applies immediately and creates its own undo/redo entry; there's no confirm step.
+
+| Property | Default |
+|---|---|
+| Size | On |
+| Player Mode | On |
+| Force | On |
+| Rotation (Z only) | Off |
+| Velocity | Off |
+| Angular Velocity | Off |
+| Player Checkpoint | Off |
+| Infinite Jump Mode | On |
+
+The default combination (Size, Player Mode, Force, Infinite Jump Mode) matches how Reset blocks always behaved before this popup existed - only change the boxes if you want a specific reset block to behave differently from that.
 
 ---
 

@@ -2,9 +2,10 @@
   import { computed, ref, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Utility } from '../js/Utility.js';
-  import BubbleCarousel from './BubbleCarousel.vue';
-  import BubbleButtonSettings from './BubbleButtonSettings.vue';
-  import BubbleButtonFullscreen from './BubbleButtonFullscreen.vue';
+  import Carousel from './Carousel.vue';
+  import ButtonSettings from './ButtonSettings.vue';
+  import ButtonFullscreen from './ButtonFullscreen.vue';
+  import MenuBackground from './MenuBackground.vue';
 
   // Initialize attributes
   const util = new Utility();
@@ -19,20 +20,22 @@
     {
       "title": i18n.t('home.button.skins'),
       "url": "./svg/button-skins.svg",
+      "svgUrl": "./svg/button-skins.svg",
+      "class": "skins",
       "callback": function() { emit('setPage', 'skins') }
     },
     {
       "title": i18n.t('home.button.level_editor'),
       "url": "./svg/button-level-editor.svg",
+      "svgUrl": "./svg/button-level-editor.svg",
       "callback": function() {
-        // TODO: Replace events after developing Level Editor 2.0
-        window.dispatchEvent(new CustomEvent('setTheme', { detail: 'origin' }));
-        setTimeout(function() { window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-manager' })); }, 0);
+        window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-manager' }));
       }
     },
     {
       "title": i18n.t('home.button.multi_player'),
       "url": "./svg/button-multiplayer.svg",
+      "svgUrl": "./svg/button-multiplayer.svg",
       "callback": function() {
         window.dispatchEvent(new CustomEvent('openSettings', { detail: 'multiplayer' }));
       }
@@ -40,6 +43,7 @@
     {
       "title": i18n.t('home.button.play'),
       "url": "./svg/button-play.svg",
+      "svgUrl": "./svg/button-play.svg",
       "callback": function() {
         emit('setPage', 'level-picker')
       }
@@ -165,16 +169,16 @@
 <template>
   <div class="page" :key="menuKey">
     <div class="background">
-      <img :src="'./svg/background-purple.svg'">
+      <MenuBackground />
     </div>
     <div class="nav">
-      <BubbleButtonFullscreen class="button fade-in right" :title="i18n.t('home.button.fullscreen')" v-if="util.isNativeApp() == false" />
-      <BubbleButtonSettings class="button fade-in" :class="{ right: util.isNativeApp() }" />
+      <ButtonFullscreen class="button fade-in right" :title="i18n.t('home.button.fullscreen')" v-if="util.isNativeApp() == false" />
+      <ButtonSettings class="button fade-in" :class="{ right: util.isNativeApp() }" />
     </div>
     <div class="content fade-in">
       <h1>BOXEL3D</h1>
       <p v-html="message" @click="clickLink($event)"></p>
-      <BubbleCarousel :items="menu" scrolling="no" />
+      <Carousel :items="menu" scrolling="no" />
     </div>
     <div class="footer">
       <a class="button fade-in" v-if="versionButtonVisible" :class="{ hidden: version == '' }" @click="openChangelog" :title="i18n.t('home.button.changelog')">

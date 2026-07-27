@@ -2,8 +2,9 @@
   import { onBeforeMount, onMounted, onUnmounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { skins } from '../js/Data.js';
-  import BubbleButtonSettings from './BubbleButtonSettings.vue';
-  import BubbleCarousel from './BubbleCarousel.vue';
+  import ButtonSettings from './ButtonSettings.vue';
+  import Carousel from './Carousel.vue';
+  import MenuBackground from './MenuBackground.vue';
 
   const i18n = useI18n({ useScope: 'global' });
   var emit = defineEmits(['setPage']);
@@ -110,18 +111,18 @@
 <template>
   <div class="page">
     <div class="background">
-      <img :src="'./svg/background-purple.svg'">
+      <MenuBackground />
     </div>
     <div class="nav">
       <a class="button left fade-in" @click="exitSkins" title="Exit to home (ESC)">
         <span class="material-symbols-rounded">undo</span>
       </a>
-      <BubbleButtonSettings class="button fade-in" />
+      <ButtonSettings class="button fade-in" />
     </div>
     <div class="content fade-in">
       <h1>{{ i18n.t('skins.title') }}</h1>
       <p>{{ i18n.t('skins.description') }}</p>
-      <BubbleCarousel :items="skins" :selected="defaultSkin" class="hide-titles" />
+      <Carousel :items="skins" :selected="defaultSkin" class="hide-titles" />
       <div class="footer">
         <a class="button center fade-in" @click="exitSkins">
           <span class="material-symbols-rounded">check_box</span>

@@ -92,9 +92,9 @@
     padding: 0.25em 1em 0.25em 0em;
 
     .material-symbols-rounded {
-      background-color: #4CA9FF;
+      background-color: var(--theme-stats-icon-color, #4CA9FF);
       box-shadow: 0em 0.125em 0em rgba(0, 0, 0, 0.25);
-      border-radius: 0.5em;
+      border-radius: var(--theme-corner-radius, 0.5em);
       width: 1.5em;
       height: 1.5em;
       display: flex;
@@ -104,6 +104,12 @@
     }
 
     > * { pointer-events: none; }
+
+    // Matches the original BubbleStats.vue icon exactly - fixed blue and rounding, independent of the theme settings
+    :root[data-theme-preset="bubble"] & .material-symbols-rounded {
+      background-color: #4CA9FF;
+      border-radius: 0.5em;
+    }
 
     .position {
       :deep(span) {

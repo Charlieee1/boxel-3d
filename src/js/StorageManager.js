@@ -61,6 +61,9 @@ class StorageManager {
   }
 
   saveScore(key, score) {
+    var settings = this.getSettings();
+    if (settings.saveInvalidRuns === false && app.isVerified() === false) return false;
+
     var scores = this.getScores();
     var oldScore = 999999999; // Default bad score
     var newScore = parseInt(score.replace(/[^\d]/g, ''));
@@ -124,25 +127,75 @@ class StorageManager {
     var storageSettings = localStorage.getItem('settings');
     var defaultSettings = {
       autosave: 0,
-      buffer: 100,
+      buffer: 0,
       connection: '',
+      deathParticleColor: '#dc265a',
       debug: false,
+      deterministic: false,
+      disableTextboxes: false,
       controls: {
         reverse: false
       },
       language: 'en',
-      levelPacks: '',
+      levelPacks: 'https://raw.githubusercontent.com/Charlieee1/Boxel-3d-Mods/refs/heads/main/community-levels/community-levels.json',
       motion: true,
       music: 'boxel-3d-pro',
       name: 'Player',
       peer: this.generateHex(''),
       progress: 1,
       quality: 10,
+      saveInvalidRuns: true,
       scale: 1,
+      showJumpIndicator: false,
       skin: { id: 466, title: "Smile", url: "./png/smile.png" },
       snap: 8,
       stats: false,
       theme: 'bubble',
+      themeAccentColor: '#eb2b6d',
+      themeBgColor1: '#1e1e1e',
+      themeBgColor2: '#FF8A4C',
+      themeBgColor3: '#FF674C',
+      themeBgReshade: '#000000',
+      themeBgReshadeOpacity: 0,
+      themeButtonReshade: '#000000',
+      themeButtonReshadeOpacity: 0,
+      themeCornerRadius: 8,
+      themeEditorButtonBgColor: '#4ca9ff',
+      themeEditorButtonBlocksColor: '#4c7dff',
+      themeEditorButtonCraneColor: '#ffc24c',
+      themeEditorIconDeselectedColor: '#999999',
+      themeEditorIconHighlightColor: null,
+      themeEditorIconHighlightColorIsExplicit: false,
+      themeEditorIconHighlightOpacity: 1,
+      themeEditorIconSelectedColor: '#ffffff',
+      themeEditorIconShadowColor: '#000000',
+      themeEditorIconShadowOpacity: 0.15,
+      themeEditorIconSize: 1.5, // em multiplier, unit appended when applied as a CSS variable
+      themeEditorTextboxBgColor: '#262626',
+      themeEditorTextboxFontColor: '#ffffff',
+      themeEditorPreset: 'dark',
+      themeEditorToolbarColor1: '#1a1a1a',
+      themeEditorToolbarColor2: '#0e0e0e',
+      themeEditorToolbarOpacity: 0.5,
+      themeIconSize: 1, // em multiplier, unit appended when applied as a CSS variable
+      themeMenuBgColor1: '#7908eb',
+      themeMenuBgColor2: '#9b08eb',
+      themeMenuBgColor3: '#b122ff',
+      themeMenuBgColor4: '#c04cff',
+      themeMultiplayerBgColor: '#a8e148',
+      themeOldBackgrounds: false,
+      themeOptionAccentColor: '#4ca9ff',
+      themeOptionAccentColor2: '#FFC24C',
+      themePlayButtonBgColor: '#ff4c8a',
+      themePlayButtonPlatformColor: '#ffd687',
+      themeSkinsBgColor: '#ff8a4c',
+      themeStatsIconColor: '#4CA9FF',
+      themePopupBgColor: '#000000',
+      themePopupOpacity: 0.5,
+      themePopupPreset: 'dark',
+      themePopupTextColor: '#ffffff',
+      themePreset: 'bubble',
+      visualGrid: false,
       volume: util.isExtension() ? 0 : 0.5,
       volumeMusic: 0.5,
       volumeEffects: 1,

@@ -1,6 +1,7 @@
 <script setup>
   import { ref, onMounted, onUnmounted } from 'vue';
-  import OriginButtonSettings from './OriginButtonSettings.vue';
+  import ButtonSettings from './ButtonSettings.vue';
+  import ThemedIcon from './ThemedIcon.vue';
 
   var items = ref([]); // return format = [{ key: '', level: '' }, ...]
   var emit = defineEmits(['setPage']);
@@ -139,13 +140,13 @@
   <div class="level-manager">
     <div class="row top">
       <div class="col">
-        <a class="item" @click="addLevel" title="Add level"><img :src="'./svg/add.svg'"></a>
-        <label class="item" title="Download level">
+        <a class="item" @click="addLevel" title="Add level"><ThemedIcon src="./svg/add.svg" /></a>
+        <label class="item" title="Upload level">
           <input @change="importLevel" class="hidden" type="file" accept="application/JSON">
-          <img :src="'./svg/download.svg'">
+          <ThemedIcon src="./svg/download.svg" />
         </label>
-        <a class="item" @click="exitLevelManager" title="Exit level manager (ESC)"><img :src="'./svg/home.svg'"></a>
-        <OriginButtonSettings class="item last" />
+        <a class="item" @click="exitLevelManager" title="Exit level manager (ESC)"><ThemedIcon src="./svg/home.svg" /></a>
+        <ButtonSettings class="item last" />
       </div>
     </div>
     <div class="row left">
@@ -153,9 +154,9 @@
         <template v-for="(item, key) of items">
           <div class="list-item">
             <input type="text" :value="item.level.name" @input="editLevelName(item, $event)">
-            <a @click="editLevel(item)" class="item" title="Edit level"><img :src="'./svg/pencil.svg'"></a>
-            <a @click="shareLevel(item)" class="item" title="Share level"><img :src="'./svg/upload.svg'"></a>
-            <a @click="deleteLevel(item)" class="item" title="Delete level"><img :src="'./svg/trash.svg'"></a>
+            <a @click="editLevel(item)" class="item" title="Edit level"><ThemedIcon src="./svg/pencil.svg" /></a>
+            <a @click="shareLevel(item)" class="item" title="Share level"><ThemedIcon src="./svg/upload.svg" /></a>
+            <a @click="deleteLevel(item)" class="item" title="Delete level"><ThemedIcon src="./svg/trash.svg" /></a>
           </div>
         </template>
       </div>

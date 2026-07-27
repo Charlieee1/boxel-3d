@@ -12,6 +12,8 @@ class Level extends Group {
     this.entityFactory = new EntityFactory();
     this.publishedFileId = null; // Reserved for Steam itemIds
     this.zoom = undefined;
+    this.disableManualCheckpointRespawn = false;
+    this.levelUIText = '';
   }
 
   addObject(object) {
@@ -48,6 +50,9 @@ class Level extends Group {
     this.theme = this.defaultTheme;
     this.defaultBlockColor = null;
     this.zoom = undefined;
+    this.disableManualCheckpointRespawn = false;
+    this.levelUIText = '';
+    if (app.levelUIText) app.levelUIText.innerHTML = '';
     app.player.removeRope();
     // Clear the session-only "Set as start position" playtest override - never persisted, cleared on exit/level-switch.
     if (app.levelEditor) {
@@ -219,6 +224,8 @@ class Level extends Group {
     levelJSON.defaultBlockColor = this.defaultBlockColor;
     levelJSON.description = this.description;
     levelJSON.zoom = this.zoom;
+    levelJSON.disableManualCheckpointRespawn = this.disableManualCheckpointRespawn;
+    levelJSON.levelUIText = this.levelUIText;
     levelJSON.version = app.version;
     levelJSON.children = [];
 
@@ -245,6 +252,9 @@ class Level extends Group {
     this.defaultBlockColor = levelData.defaultBlockColor || null;
     this.description = levelData.description;
     this.zoom = levelData.zoom;
+    this.disableManualCheckpointRespawn = levelData.disableManualCheckpointRespawn || false;
+    this.levelUIText = levelData.levelUIText || '';
+    if (app.levelUIText) app.levelUIText.innerHTML = this.levelUIText; // Intentional: allows HTML tags
 
     // Loop through JSON level data
     for (var i = 0; i < levelData.children.length; i++) {
@@ -266,6 +276,7 @@ class Level extends Group {
       child.updateMatrixWorld();
       child.updateHelper();
     }
+    app.player.jumpReady = true;
   }
 
   retryLevel(keepCheckpoint = false, respawnToTemp = true) {
@@ -321,6 +332,9 @@ class Level extends Group {
     object.setText(objectData.text);
     object.setFriction(objectData.friction);
     object.setColors(objectData.color || app.level.entityFactory.color);
+    object.setOpacity(objectData.opacity != null ? objectData.opacity : 1, true);
+    if (objectData.isDeathBlock != null && object.getClass() === 'cube') object.setDeathBlock(objectData.isDeathBlock, true);
+    if (objectData.resetConfig != null && object.getClass() === 'reset') object.setResetConfig(objectData.resetConfig, false);
   }
 
   showTip(text) {
@@ -391,6 +405,13 @@ class Level extends Group {
       })
     });
     return author;
+  }
+
+  isFromCommunityPack(title) {
+    // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
+    var communityPack = levels.packs.find(pack => pack.title === 'Level Packs');
+    if (communityPack == null) return false;
+    return communityPack.levels.some(level => level.title === title);
   }
 
   getLevelIndex(title) {

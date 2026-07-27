@@ -1,4 +1,4 @@
-import { Euler, Mesh, MeshBasicMaterial, Object3D, SphereGeometry, Vector2, Vector3 } from 'three';
+import { Euler, Mesh, MeshBasicMaterial, Object3D, Plane, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
 import { Body, Composite, Engine, World } from 'matter-js';
 import { PuttyControls } from './PuttyControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
@@ -168,6 +168,13 @@ class LevelEditor {
     window.addEventListener('setSelectedObject', this.boundUpdateRender);
     window.addEventListener('setSelectedMode', this.boundUpdateRender);
     window.addEventListener('themeSelected', this.boundUpdateRender);
+    window.addEventListener('updateScale', this.boundUpdateRender); // Fires on every settings save - lets the visual grid toggle apply immediately
+    window.addEventListener('blur', this.clearKeys.bind(this)); // Losing focus mid-keypress (e.g. alt-tab) can skip the keyup, so drop any tracked keys
+  }
+
+  // Releases all tracked key state - guards against a modifier (e.g. Shift) getting stuck "held" after a missed keyup
+  clearKeys() {
+    for (const code in this.keys) this.keys[code] = false;
   }
 
   pointerDown(e) {
@@ -1315,6 +1322,87 @@ class LevelEditor {
       app.camera.updateMatrixWorld();
       app.graphics.render();
     }
+    this.renderGrid();
+  }
+
+  // ----- Visual grid (level editor only): a 2D canvas overlay drawn at app.BOX_SIZE spacing on the current Z plane -----
+
+  ensureGridCanvas() {
+    if (this.gridCanvas) return this.gridCanvas;
+    var canvas = document.createElement('canvas');
+    canvas.className = 'level-editor-grid';
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '0';
+    document.body.appendChild(canvas);
+    this.gridCanvas = canvas;
+    this.gridContext = canvas.getContext('2d');
+    return canvas;
+  }
+
+  // Unprojects a screen point (pixels) onto the world plane z = planeZ
+  unprojectToPlane(screenX, screenY, planeZ) {
+    var raycaster = new Raycaster();
+    var ndc = new Vector2((screenX / app.window.innerWidth) * 2 - 1, -(screenY / app.window.innerHeight) * 2 + 1);
+    raycaster.setFromCamera(ndc, app.camera);
+    var plane = new Plane(new Vector3(0, 0, 1), -planeZ);
+    var pos = new Vector3();
+    var hit = raycaster.ray.intersectPlane(plane, pos);
+    return hit ? pos : null;
+  }
+
+  renderGrid() {
+    var settings = app.storage.getSettings();
+    var visible = settings.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
+    var canvas = this.ensureGridCanvas();
+    canvas.style.display = visible ? 'block' : 'none';
+    if (visible == false) return;
+
+    canvas.width = app.window.innerWidth;
+    canvas.height = app.window.innerHeight;
+    var ctx = this.gridContext;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Find the world-space rectangle visible on the current Z plane by unprojecting the four screen corners
+    var z = this.currentZ || 0;
+    var corners = [
+      this.unprojectToPlane(0, 0, z),
+      this.unprojectToPlane(canvas.width, 0, z),
+      this.unprojectToPlane(0, canvas.height, z),
+      this.unprojectToPlane(canvas.width, canvas.height, z)
+    ].filter(function(p) { return p != null; });
+    if (corners.length < 4) return; // camera looking away from the plane
+
+    var minX = Math.min.apply(null, corners.map(function(p) { return p.x; }));
+    var maxX = Math.max.apply(null, corners.map(function(p) { return p.x; }));
+    var minY = Math.min.apply(null, corners.map(function(p) { return p.y; }));
+    var maxY = Math.max.apply(null, corners.map(function(p) { return p.y; }));
+
+    var size = app.BOX_SIZE;
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.3)';
+    ctx.lineWidth = 1;
+
+    var startX = Math.floor(minX / size) * size;
+    for (var x = startX; x <= maxX; x += size) {
+      var p1 = this.projectToScreen({ x: x, y: minY, z: z });
+      var p2 = this.projectToScreen({ x: x, y: maxY, z: z });
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+
+    var startY = Math.floor(minY / size) * size;
+    for (var y = startY; y <= maxY; y += size) {
+      var q1 = this.projectToScreen({ x: minX, y: y, z: z });
+      var q2 = this.projectToScreen({ x: maxX, y: y, z: z });
+      ctx.beginPath();
+      ctx.moveTo(q1.x, q1.y);
+      ctx.lineTo(q2.x, q2.y);
+      ctx.stroke();
+    }
   }
 
   mouseDown(e) {
@@ -1358,13 +1446,19 @@ class LevelEditor {
               var action = this.exclusiveAction;
               if (target !== action.controlBlock) {
                 // No history entry here - recoloring is folded into the transform's own single entry on confirm/cancel.
-                action.selected.forEach(obj => obj.setColors(target.color));
+                action.selected.forEach(obj => {
+                  obj.setColors(target.color);
+                  obj.setOpacity(target.getOpacity());
+                  if (obj.getClass() === 'cube') obj.setDeathBlock(target.getDeathBlock());
+                });
                 this.updateRender();
               }
               return;
             }
             if (app.selectedObject) {
               target.setColors(app.selectedObject.color);
+              target.setOpacity(app.selectedObject.getOpacity());
+              if (target.getClass() === 'cube') target.setDeathBlock(app.selectedObject.getDeathBlock());
               app.levelHistory.save('Copied color');
               this.updateRender();
               return;

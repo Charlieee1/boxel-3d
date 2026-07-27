@@ -1,13 +1,15 @@
 <script setup>
-  import '../scss/Bubble.scss';
+  import '../scss/Main.scss';
   import { onMounted, onUnmounted, ref } from 'vue';
-  import BubblePageHome from './BubblePageHome.vue';
-  import BubblePageSkins from './BubblePageSkins.vue';
-  import BubblePageLevelPicker from './BubblePageLevelPicker.vue';
-  import BubblePageCampaign from './BubblePageCampaign.vue';
-  import BubbleMultiplayer from './BubbleMultiplayer.vue';
-  import BubbleSettings from './BubbleSettings.vue';
-  import BubblePopup from './BubblePopup.vue';
+  import PageHome from './PageHome.vue';
+  import PageSkins from './PageSkins.vue';
+  import PageLevelPicker from './PageLevelPicker.vue';
+  import PageCampaign from './PageCampaign.vue';
+  import PageLevelManager from './PageLevelManager.vue';
+  import PageLevelEditor from './PageLevelEditor.vue';
+  import Multiplayer from './Multiplayer.vue';
+  import Settings from './Settings.vue';
+  import Popup from './Popup.vue';
 
   // Conditionally render components
   var page = ref('home');
@@ -59,12 +61,14 @@
 
 <template>
   <div class="ui-bubble" :style="{ fontSize }">
-    <BubblePageHome v-if="page == 'home'" @set-page="setPage" />
-    <BubblePageSkins v-if="page == 'skins'" @set-page="setPage" />
-    <BubblePageLevelPicker v-if="page == 'level-picker'" @set-page="setPage" />
-    <BubblePageCampaign v-if="page == 'campaign'" @set-page="setPage" />
-    <BubbleMultiplayer />
-    <BubbleSettings />
-    <BubblePopup />
+    <PageHome v-if="page == 'home'" @set-page="setPage" />
+    <PageSkins v-if="page == 'skins'" @set-page="setPage" />
+    <PageLevelPicker v-if="page == 'level-picker'" @set-page="setPage" />
+    <PageCampaign v-if="page == 'campaign'" @set-page="setPage" />
+    <PageLevelManager v-if="page == 'level-manager'" @set-page="setPage" />
+    <PageLevelEditor v-if="page == 'level-editor'" @set-page="setPage" />
+    <Multiplayer />
+    <Settings />
+    <Popup />
   </div>
 </template>

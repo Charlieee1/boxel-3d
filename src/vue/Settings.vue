@@ -1,14 +1,15 @@
 <script setup>
   import { ref, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import BubbleSettingsTabs from './BubbleSettingsTabs.vue';
-  import BubbleSettingsPanelGeneral from './BubbleSettingsPanelGeneral.vue';
-  import BubbleSettingsPanelGraphics from './BubbleSettingsPanelGraphics.vue';
-  import BubbleSettingsPanelMultiplayer from './BubbleSettingsPanelMultiplayer.vue';
-  import BubbleSettingsPanelControls from './BubbleSettingsPanelControls.vue';
-  import BubbleSettingsPanelAudio from './BubbleSettingsPanelAudio.vue';
-  import BubbleSettingsPanelData from './BubbleSettingsPanelData.vue';
-  import BubbleSettingsPanelLanguage from './BubbleSettingsPanelLanguage.vue';
+  import SettingsTabs from './SettingsTabs.vue';
+  import SettingsPanelGeneral from './SettingsPanelGeneral.vue';
+  import SettingsPanelGraphics from './SettingsPanelGraphics.vue';
+  import SettingsPanelTheme from './SettingsPanelTheme.vue';
+  import SettingsPanelMultiplayer from './SettingsPanelMultiplayer.vue';
+  import SettingsPanelControls from './SettingsPanelControls.vue';
+  import SettingsPanelAudio from './SettingsPanelAudio.vue';
+  import SettingsPanelData from './SettingsPanelData.vue';
+  import SettingsPanelLanguage from './SettingsPanelLanguage.vue';
 
   // Initialize attributes
   const i18n = useI18n({ useScope: 'global' });
@@ -133,15 +134,16 @@
     <div class="popup settings" v-show="isOpen == true">
       <div class="background" @click="runLastInputCallback"></div>
       <div class="container">
-        <BubbleSettingsTabs :tab="tab" @changeTab="changeTab" />
+        <SettingsTabs :tab="tab" @changeTab="changeTab" />
         <div class="content compact">
-          <BubbleSettingsPanelGeneral :settings="settings" v-show="tab == 'general'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelAudio :settings="settings" v-show="tab == 'audio'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelGraphics :settings="settings" v-show="tab == 'graphics'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelControls :settings="settings" v-show="tab == 'controls'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelMultiplayer :settings="settings" v-show="tab == 'multiplayer'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelData :settings="settings" v-show="tab == 'data'" @updateSettings="updateSettings" />
-          <BubbleSettingsPanelLanguage :settings="settings" v-show="tab == 'language'" @updateSettings="updateSettings" />
+          <SettingsPanelGeneral :settings="settings" v-show="tab == 'general'" @updateSettings="updateSettings" />
+          <SettingsPanelAudio :settings="settings" v-show="tab == 'audio'" @updateSettings="updateSettings" />
+          <SettingsPanelGraphics :settings="settings" v-show="tab == 'graphics'" @updateSettings="updateSettings" />
+          <SettingsPanelTheme :settings="settings" v-show="tab == 'theme'" @updateSettings="updateSettings" />
+          <SettingsPanelControls :settings="settings" v-show="tab == 'controls'" @updateSettings="updateSettings" />
+          <SettingsPanelMultiplayer :settings="settings" v-show="tab == 'multiplayer'" @updateSettings="updateSettings" />
+          <SettingsPanelData :settings="settings" v-show="tab == 'data'" @updateSettings="updateSettings" />
+          <SettingsPanelLanguage :settings="settings" v-show="tab == 'language'" @updateSettings="updateSettings" />
           <a class="close" @click="runLastInputCallback" :title="i18n.t('popup.button.close')">
             <span class="material-symbols-rounded">close</span>
           </a>

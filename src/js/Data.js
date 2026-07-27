@@ -27,12 +27,17 @@ function isValidUrl(urlString) {
   }
 }
 
+const defaultLevelPacksUrl = 'https://raw.githubusercontent.com/Charlieee1/Boxel-3d-Mods/refs/heads/main/community-levels/community-levels.json';
+
 async function fetchLevelPacks() {
   // Get settings from local storage
   const settings = JSON.parse(localStorage.getItem('settings') || '{}');
 
+  // Load the default level pack when none has been set yet
+  const levelPacksSetting = settings?.levelPacks || defaultLevelPacksUrl;
+
   // Get list of URLs (and remove duplicates)
-  const urls = [...new Set(settings?.levelPacks?.split(/\r?\n/) || [])];
+  const urls = [...new Set(levelPacksSetting.split(/\r?\n/))];
   const pack = {
     title: "Level Packs",
     theme: "classic",
