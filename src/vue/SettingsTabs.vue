@@ -23,6 +23,10 @@
       <label>{{ i18n.t('settings.graphics.title') }}</label>
       <span class="material-symbols-rounded">visibility</span>
     </div>
+    <div class="tab" :class="{ 'selected': tab == 'theme' }" @click="$emit('changeTab', 'theme');">
+      <label>{{ i18n.t('settings.theme.title') }}</label>
+      <span class="material-symbols-rounded">palette</span>
+    </div>
     <div class="tab" :class="{ 'selected': tab == 'multiplayer' }" @click="$emit('changeTab', 'multiplayer');">
       <label>{{ i18n.t('settings.multiplayer.title') }}</label>
       <span class="material-symbols-rounded">group</span>

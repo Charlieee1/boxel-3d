@@ -47,6 +47,10 @@ class Cube extends Mesh {
     this.name = this.uuid;
     this.isCube = true; // Used for level editor
     this.textEnabled = false;
+    this.opacity = 1;
+    this.opacityOrigin = 1;
+    this.isDeathBlock = false;
+    this.isDeathBlockOrigin = false;
     this.setPosition({ x: options.x, y: options.y, z: options.z });
     this.setRotation(options.angle);
     this.setScale({ x: options.scaleX, y: options.scaleY, z: options.scaleZ });
@@ -103,6 +107,61 @@ class Cube extends Mesh {
   setColors(color, updateOrigin = true) {
     this.color = color; // Update last color
     this.shapes.setColors(color, updateOrigin);
+  }
+
+  setOpacity(value, updateOrigin = true) {
+    this.opacity = Math.max(0, Math.min(1, parseFloat(value))); // Clamp to [0,1]
+    this.shapes.setOpacities(this.opacity);
+
+    // Some subclasses (Player's skin, Control/Power/Teleport's GLTF model, etc.) add extra visual
+    // meshes directly as children, outside this.shapes - apply opacity to those too. Their materials
+    // can be shared across cloned instances (SkeletonUtils.clone doesn't clone materials), so each
+    // mesh's material is cloned once, per-instance, before being mutated.
+    for (var i = 0; i < this.children.length; i++) {
+      var child = this.children[i];
+      if (child !== this.shapes && child !== this.helper) {
+        child.traverse((node) => {
+          if (node.material) {
+            if (node.userData.opacityMaterialCloned !== true) {
+              node.material = node.material.clone();
+              node.userData.opacityMaterialCloned = true;
+            }
+            node.material.transparent = true;
+            node.material.opacity = this.opacity;
+          }
+        });
+      }
+    }
+
+    if (updateOrigin == true) this.setOpacityOrigin(this.opacity);
+  }
+
+  setOpacityOrigin(opacity) {
+    this.opacityOrigin = opacity;
+  }
+
+  getOpacity() {
+    return this.opacity;
+  }
+
+  setDeathBlock(value, updateOrigin = true) {
+    this.isDeathBlock = value === true;
+    // Cube-only: subclasses (Control, Tip, Resize, etc.) already manage their own
+    // permanent hitbox.isSensor/class for unrelated purposes - don't stomp on it here,
+    // since resetToOrigin() calls this on every reset for every block type.
+    if (this.getClass() === 'cube') {
+      this.hitbox.isSensor = this.isDeathBlock;
+      this.hitbox.class = this.isDeathBlock ? 'sensor' : 'hitbox';
+    }
+    if (updateOrigin == true) this.setDeathBlockOrigin(this.isDeathBlock);
+  }
+
+  setDeathBlockOrigin(isDeathBlock) {
+    this.isDeathBlockOrigin = isDeathBlock;
+  }
+
+  getDeathBlock() {
+    return this.isDeathBlock;
   }
 
   setPosition(position = {}, updateOrigin = true) {
@@ -227,6 +286,8 @@ class Cube extends Mesh {
     this.setFriction(this.frictionOrigin, false);
     this.setMode(this.modeOrigin, false);
     this.setJumpMode(this.jumpModeOrigin, false);
+    this.setOpacity(this.opacityOrigin, false);
+    this.setDeathBlock(this.isDeathBlockOrigin || false, false);
     Body.setVelocity(this.body, { x: 0, y: 0 });
     Body.setAngularVelocity(this.body, 0);
   }
@@ -311,7 +372,7 @@ class Cube extends Mesh {
     }
     else {
       this.shapes.resetColors();
-      this.shapes.setOpacities(1);
+      this.shapes.setOpacities(this.opacity);
     }
   }
 
@@ -422,6 +483,12 @@ class Cube extends Mesh {
 
     // Include color if object has color
     if (this.color != null) json.color = this.color;
+
+    // Include opacity only if not default (1)
+    if (this.opacity != null && this.opacity !== 1) json.opacity = this.opacity;
+
+    // Include death block flag only if enabled
+    if (this.isDeathBlock === true) json.isDeathBlock = true;
 
     // Return json
     return json;

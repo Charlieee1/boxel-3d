@@ -11,7 +11,6 @@
 - Reset block being able to reset specific properties instead of all
 
 # Settings
-- Deteminism
 - External resources
   - Level packs
   - Skins
@@ -22,6 +21,11 @@
   - For level editor, setting
 
 # Extra features
+- Gravity preservation glitch working for campaign levels
+- Allow jumping by clicking instantly after closing textbox
+- Separate level packs in carousel
+- Send short skin urls to other players in multiplayer
+- Playing all songs instead of just one
 - Add other mods into the game
 - Add mod hooks
 - Two new types of blocks

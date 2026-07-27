@@ -1,5 +1,6 @@
 <script setup>
-  import { onBeforeMount, onMounted, onUnmounted, ref } from 'vue';
+  import { onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { Utility } from '../js/Utility.js';
 
   // Define items for carousel
   const props = defineProps({
@@ -10,7 +11,19 @@
     items: Object,
     selected: Object,
   });
+  const util = new Utility();
   var selectedItem = ref();
+  // Raw <svg> markup for items that opt into theme-recolourable inline art (item.svgUrl) instead of a plain <img>
+  var inlineSvg = ref({});
+
+  // Fetches and caches each item's inline svg so its fills can react to --theme-* CSS variables live
+  async function loadInlineSvgs() {
+    for (var item of props.items || []) {
+      if (item.svgUrl && inlineSvg.value[item.svgUrl] == null) {
+        inlineSvg.value[item.svgUrl] = await util.getInlineSvg(item.svgUrl);
+      }
+    }
+  }
 
   // Add event listener(s)
   function addEventListeners() {
@@ -114,7 +127,10 @@
   onMounted(function() {
     scrollToSelected(null, 'instant');
     addEventListeners();
+    loadInlineSvgs();
   });
+
+  watch(function() { return props.items; }, loadInlineSvgs);
 
   onUnmounted(function() {
     removeEventListeners();
@@ -126,7 +142,8 @@
     <template v-for="(item, key) of items">
       <div class="item" :class="[{ 'selected': isSelected(item) }, item.class]" @click="selectItem(item, $event)">
         <div class="thumbnail">
-          <img :src="item.url">
+          <div class="svg" v-if="item.svgUrl && inlineSvg[item.svgUrl]" v-html="inlineSvg[item.svgUrl]"></div>
+          <img v-else :src="item.url">
           <div v-if="item.overlay" class="overlay"></div>
           <div class="label" v-if="hideLabel != true && item.label" v-html="item.label"></div>
           <div class="title" v-if="hideTitle != true" v-html="item.description || item.title"></div>

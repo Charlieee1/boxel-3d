@@ -1,9 +1,13 @@
 <script setup>
   import { ref, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
-  
+  import { Utility } from '../js/Utility.js';
+
   // Initialize attributes
   const i18n = useI18n({ useScope: 'global' });
+  const util = new Utility();
+  // Inline (not CSS background-image) so its fills can react to --theme-skins-bg-color CSS variables live
+  var backgroundSvg = ref('');
   var title = ref('');
   var text = ref('');
   var description = ref('');
@@ -93,8 +97,8 @@
 
   function keydown(e) {
     if (isOpen.value == true) {
-      // Prevent duplicate callbacks when key is held down
-      if (e.repeat === true) return;
+      // OS key-repeat (e.repeat) is intentionally allowed through, so holding a key keeps closing
+      // consecutive popups (ex: textboxes) instead of getting stuck once repeat kicks in
 
       // Do not treat typing as a popup action
       if (e.target.type == 'text' || e.target.tagName == 'TEXTAREA' || e.target.isContentEditable === true) return;
@@ -119,8 +123,9 @@
     }
   }
 
-  onMounted(function() {
+  onMounted(async function() {
     addEventListeners();
+    backgroundSvg.value = await util.getInlineSvg('./svg/background-popup.svg');
   });
 
   onUnmounted(function() {
@@ -134,6 +139,7 @@
       <div class="background" @click="runLastInputCallback"></div>
       <div class="container">
         <div class="content">
+          <div class="background-svg" v-html="backgroundSvg"></div>
           <h1 class="title" v-html="title" v-if="title"></h1>
           <p class="text" v-html="text" v-if="text"></p>
           <p class="description" v-html="description" v-if="description"></p>

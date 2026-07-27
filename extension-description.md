@@ -9,6 +9,18 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.3-m1.2.0
+- Fixed bugs
+- Force set canjump to true at start of every level
+- Enable main level pack by default
+- Added determinstic mode
+- Added death block property
+- Added opacity property
+- Added theme customization
+- Added more settings
+- Added level properties
+- Delete old ui
+
 v2.9.3-m1.1.0
 - Added thin fast build mode
 - Added textbox to change default building plane

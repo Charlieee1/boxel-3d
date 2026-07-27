@@ -1,10 +1,24 @@
 import { Bodies, Body } from 'matter-js';
 import { Cube } from './Cube.js';
 
+// Default reset config: matches original (pre-config) Reset block behavior
+const DEFAULT_RESET_CONFIG = {
+  resetSize: true,
+  resetPlayerMode: true,
+  resetForce: true,
+  resetRotation: false, // Only Z rotation
+  resetVelocity: false,
+  resetAngularVelocity: false,
+  resetPlayerCheckpoint: false,
+  resetInfiniteJumpMode: true
+};
+
 class Reset extends Cube {
   constructor(options = {}) {
     super(options);
     this.body.class = 'reset';
+    this.resetConfig = { ...DEFAULT_RESET_CONFIG };
+    this.resetConfigOrigin = { ...DEFAULT_RESET_CONFIG };
 
     // Add sensor and parts
     this.hitbox.isSensor = true;
@@ -18,6 +32,36 @@ class Reset extends Cube {
 
   setColors() {
     // Prevent setting colors
+  }
+
+  setResetConfig(config, updateOrigin = true) {
+    this.resetConfig = { ...this.resetConfig, ...config };
+    if (updateOrigin == true) this.setResetConfigOrigin(this.resetConfig);
+  }
+
+  setResetConfigOrigin(config) {
+    this.resetConfigOrigin = { ...config };
+  }
+
+  getResetConfig() {
+    return this.resetConfig;
+  }
+
+  resetToOrigin() {
+    super.resetToOrigin();
+    if (this.resetConfigOrigin) this.setResetConfig(this.resetConfigOrigin, false);
+  }
+
+  toJSON() {
+    var json = super.toJSON();
+
+    // Include resetConfig only if any value differs from the default
+    var hasNonDefault = Object.keys(DEFAULT_RESET_CONFIG).some(function(key) {
+      return this.resetConfig[key] !== DEFAULT_RESET_CONFIG[key];
+    }.bind(this));
+    if (hasNonDefault) json.resetConfig = this.resetConfig;
+
+    return json;
   }
 
   addShapes(options) {

@@ -1,6 +1,6 @@
 import { DoubleSide, Mesh, MeshPhongMaterial, PlaneGeometry, SRGBColorSpace, TextureLoader, Vector2 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { Body, Query, Vector } from 'matter-js';
+import { Body, Engine, Query, Vector } from 'matter-js';
 import { Utility } from '../Utility.js';
 import { Cube } from './Cube.js';
 import { Rope } from '../Rope.js';
@@ -24,6 +24,10 @@ class Player extends Cube {
     this.inputBuffer = 0;
     this.addLight('#dc265a', 16000, 500, false);
     this.controls = { left: 0, right: 0, acceleration: 0.5, speed: 4 };
+    // Tracks which movement keys are actually physically held, independent of this.controls - a Reset
+    // block zeroes this.controls to stop momentum, but heldControls still reflects reality so a Control
+    // block touched later (without ever releasing the key) can immediately resume movement
+    this.heldControls = { left: 0, right: 0 };
     this.rope = new Rope();
     this.skin = { url: '' };
 
@@ -101,6 +105,14 @@ class Player extends Cube {
 
   setControls(name, value) {
     this.controls[name] = value;
+    this.heldControls[name] = value;
+  }
+
+  // Restores this.controls from the physically-held keys, without waiting for another keydown/keyup -
+  // used when re-entering control mode (ex: a Control block) after a Reset block zeroed this.controls
+  syncControlsFromHeld() {
+    this.controls.left = this.heldControls.left;
+    this.controls.right = this.heldControls.right;
   }
 
   setInputBuffer(value) {
@@ -199,15 +211,17 @@ class Player extends Cube {
     if (this.isFrozen() == false) {
       this.freeze(true);
       this.visible = false;
-      this.killTimeout = setTimeout(function() { this.restart(); }.bind(this), 1000); // Respawn in 1 second
+      this.killTimeout = setTimeout(function() { this.restart(true); }.bind(this), 1000); // Respawn in 1 second (bypasses manual respawn gate, this is automatic)
+      var settings = app.storage.getSettings();
+      var particleColor = settings.deathParticleColor || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
       for (var row = -rows / 2; row < rows / 2; row++) {
         for (var col = -cols / 2; col < cols / 2; col++) {
           var randAngle = this.util.randomNumber(0, 360 * (Math.PI / 180));
           var particleData = {
-            color: this.color,
-            position: { 
+            color: particleColor,
+            position: {
               x: this.position.x + (col * scale.x) + (scale.x / 2),
               y: this.position.y + (row * scale.y) + (scale.y / 2), 
               z: 0
@@ -221,7 +235,7 @@ class Player extends Cube {
           app.level.setObjectProperties(particle, particleData);
           app.level.addObject(particle);
           particle.isParticle = true;
-          particle.setColors(this.color);
+          particle.setColors(particleColor);
           Body.setVelocity(particle.body, this.body.velocity);
         }
       }
@@ -263,6 +277,13 @@ class Player extends Cube {
   respawn(override = false) {
     // Override is used when a checkpoint set
     if (this.isFrozen() == true || override == true) {
+      // Reset impulses and collision-pair cache if deterministic mode enabled
+      if (app.storage.getSettings().deterministic === true) {
+        Body.setPositionImpulse(this.body, { x: 0, y: 0 });
+        Body.setConstraintImpulse(this.body, { x: 0, y: 0 });
+        Engine.clear(app.engine);
+      }
+
       app.level.removeParticles();
       this.resetToOrigin();
       this.setPositionToCheckpoint();
@@ -272,7 +293,17 @@ class Player extends Cube {
     }
   }
 
-  restart() {
+  restart(isAutomatic = false) {
+    // Gate manual checkpoint respawn if disabled at level - automatic death respawn (from kill()) always bypasses this
+    if (isAutomatic !== true && app.level.disableManualCheckpointRespawn === true) return;
+
+    // Reset impulses and collision-pair cache if deterministic mode enabled
+    if (app.storage.getSettings().deterministic === true) {
+      Body.setPositionImpulse(this.body, { x: 0, y: 0 });
+      Body.setConstraintImpulse(this.body, { x: 0, y: 0 });
+      Engine.clear(app.engine);
+    }
+
     app.level.retryLevel(true);
 
     // Dispatch restart event
@@ -355,12 +386,28 @@ class Player extends Cube {
     this.addTexture(skin);
   }
 
-  reset() {
+  reset(config = {}) {
+    // Matches old pre-config reset() behavior: only size, player mode, force, jump mode
+    var resetConfig = {
+      resetSize: true,
+      resetPlayerMode: true,
+      resetForce: true,
+      resetRotation: false,
+      resetVelocity: false,
+      resetAngularVelocity: false,
+      resetPlayerCheckpoint: false,
+      resetInfiniteJumpMode: true,
+      ...config
+    };
     app.updateGravity();
-    this.setForceDirection();
-    this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
-    this.setMode(this.modeOrigin, false);
-    this.setJumpMode(this.jumpModeOrigin, false);
+    if (resetConfig.resetForce) this.setForceDirection(this.forceOrigin, false);
+    if (resetConfig.resetSize) this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
+    if (resetConfig.resetPlayerMode) this.setMode(this.modeOrigin, false);
+    if (resetConfig.resetInfiniteJumpMode) this.setJumpMode(this.jumpModeOrigin, false);
+    if (resetConfig.resetRotation) this.setRotation(this.rotationOrigin, false);
+    if (resetConfig.resetVelocity) Body.setVelocity(this.body, { x: 0, y: 0 });
+    if (resetConfig.resetAngularVelocity) Body.setAngularVelocity(this.body, 0);
+    if (resetConfig.resetPlayerCheckpoint) this.removeCheckpoint();
     this.controls.left = this.controls.right = 0;
     this.jumpBuffer = 0;
 

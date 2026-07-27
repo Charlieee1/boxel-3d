@@ -2,11 +2,13 @@ import { MathUtils } from 'three';
 
 class Collision {
   constructor() {
-    
+    this.previousFrameCollidingBlocks = new Set(); // Track block uuids colliding with player last frame (deterministic mode dedup)
   }
 
   checkPlayerCollision(e) {
     var pairs = e.pairs;
+    var settings = app.storage.getSettings();
+    var currentFrameCollidingBlocks = new Set();
 
     // Loop through pairs of collisions
     for (var pairIndex = 0; pairIndex < pairs.length; pairIndex++) {
@@ -31,9 +33,20 @@ class Collision {
 
             // Check sensor points
             if (bodyA.class == 'sensor') {
-              if (objectA.body.class == 'tip') {
+              // Deterministic mode: skip re-triggering a player-block effect that was already active last frame
+              // (prevents e.g. a checkpoint/gravity block re-firing when the player respawns still touching it)
+              var isPlayerPair = objectB.body.class == 'player';
+              if (isPlayerPair) currentFrameCollidingBlocks.add(objectA.uuid);
+              var isNewPair = !this.previousFrameCollidingBlocks.has(objectA.uuid);
+              var shouldTrigger = !isPlayerPair || isNewPair || settings.deterministic !== true;
+
+              if (shouldTrigger) {
+              if (objectA.body.class == 'cube' && objectA.isDeathBlock === true) {
+                if (objectB.body.class == 'player') { app.player.kill(); }
+              }
+              else if (objectA.body.class == 'tip') {
                 if (objectB.body.class == 'player') {
-                  app.level.showTip(objectA.text);
+                  if (settings.disableTextboxes !== true) app.level.showTip(objectA.text);
                   objectA.hide(true);
                 }
               }
@@ -106,12 +119,13 @@ class Collision {
               }
               else if (objectA.body.class == 'reset') {
                 if (objectB.body.class ==  'player') {
-                  app.player.reset();
+                  app.player.reset(objectA.getResetConfig());
                 }
               }
               else if (objectA.body.class == 'control') {
                 if (objectB.body.class ==  'player') {
                   app.player.setMode('control', false);
+                  app.player.syncControlsFromHeld();
                   app.assets.audio.play('teleport');
                 }
               }
@@ -136,6 +150,7 @@ class Collision {
                   app.assets.audio.play('teleport');
                 }
               }
+              }
             }
             else {
               if (objectA.body.class == 'cube') {
@@ -149,6 +164,9 @@ class Collision {
         }
       }
     }
+
+    // Update deterministic-mode frame tracking
+    this.previousFrameCollidingBlocks = currentFrameCollidingBlocks;
   }
 }
 
