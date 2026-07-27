@@ -319,9 +319,7 @@ class App {
     // Group 2 defaults match Main.scss's actual pink/orange/yellow UI (verified fallbacks), not invented dark grey
     var bubble = {
       themeBgColor1: '#1e1e1e', themeBgColor2: '#FF8A4C', themeBgColor3: '#FF674C',
-      // Bubble is the flashy default theme - reshade tint stays fully transparent (opacity 0)
-      themeBgReshade: '#000000', themeBgReshadeOpacity: 0,
-      themeButtonReshade: '#000000', themeButtonReshadeOpacity: 0, themeCornerRadius: 8, themeIconSize: 1,
+      themeCornerRadius: 8, themeIconSize: 1,
       themeAccentColor: '#eb2b6d', themeOptionAccentColor: '#4ca9ff', themeOptionAccentColor2: '#FFC24C',
       // Blue instead of the theme's orange accent - stands out against the flashy Bubble UI
       themeStatsIconColor: '#4CA9FF',
@@ -340,7 +338,6 @@ class App {
       themeBgColor2: '#4ca9ff', themeBgColor3: '#1d4264', themeCornerRadius: 4,
       // Darker red accent; option-accent is a darker version of Bubble's blue, option-accent-2 is the dark purple
       themeAccentColor: '#8f193a', themeOptionAccentColor: '#316ea6', themeOptionAccentColor2: '#ffffff',
-      themeBgReshadeOpacity: 0.5, themeButtonReshadeOpacity: 0.5,
       // Skins/pause-menu background primary colour
       themeSkinsBgColor: '#FF80C0',
       // Level editor button: lighter purple crane, darker background (same hue/saturation, lower lightness - not desaturated)
@@ -358,11 +355,11 @@ class App {
     var legacy = Object.assign({}, classic, { themeCornerRadius: 0 });
 
     if (preset == 'funk') {
-      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected - no reshade tint
+      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected
       var rnd = () => this.getRandomVividColor();
       return Object.assign({}, bubble, {
         themeBgColor1: rnd(), themeBgColor2: rnd(), themeBgColor3: rnd(),
-        themeBgReshadeOpacity: 0, themeButtonReshadeOpacity: 0, themeCornerRadius: 8,
+        themeCornerRadius: 8,
         themeAccentColor: rnd(), themeOptionAccentColor: rnd(), themeOptionAccentColor2: rnd(),
         themeStatsIconColor: rnd(),
         themeSkinsBgColor: rnd(),
@@ -441,11 +438,6 @@ class App {
     root.setProperty('--theme-bg-color-1', settings.themeBgColor1);
     root.setProperty('--theme-bg-color-2', settings.themeBgColor2);
     root.setProperty('--theme-bg-color-3', settings.themeBgColor3);
-    // Reshade opacity is its own explicit setting now, so a black (#000000) reshade colour still works (colour and "is it on" are no longer tied together)
-    root.setProperty('--theme-bg-reshade', settings.themeBgReshade);
-    root.setProperty('--theme-bg-reshade-opacity', settings.themeBgReshadeOpacity);
-    root.setProperty('--theme-button-reshade', settings.themeButtonReshade);
-    root.setProperty('--theme-button-reshade-opacity', settings.themeButtonReshadeOpacity);
     root.setProperty('--theme-corner-radius', settings.themeCornerRadius + 'px');
     root.setProperty('--theme-icon-size', settings.themeIconSize + 'em');
     root.setProperty('--theme-accent-color', settings.themeAccentColor);
@@ -629,7 +621,7 @@ class App {
       var theme = this.level.getTheme(options.json.theme);
       var zoom = options.json.zoom || app.camera.position.zDefault;
       if (theme == null) theme = this.level.getPackTheme(title);
-      if (storageSettings.theme == 'origin' || theme == null) theme = app.level.getTheme('classic');
+      if (theme == null) theme = app.level.getTheme('classic');
       // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
       if (storageSettings.themeOldBackgrounds == true && this.level.isFromCommunityPack(title) === false) theme = app.level.getTheme('classic');
       app.level.entityFactory.color = theme.color;
