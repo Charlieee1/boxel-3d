@@ -912,5 +912,12 @@
       "Added level properties",
       "Delete old ui"
     ]
+  },
+  {
+    "version": "2.9.3-m1.2.1",
+    "revisions": [
+      "Fixed deterministic mode bugs",
+      "Fixed jump indicator bug"
+    ]
   }
 ]

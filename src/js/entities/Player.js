@@ -279,8 +279,11 @@ class Player extends Cube {
     if (this.isFrozen() == true || override == true) {
       // Reset impulses and collision-pair cache if deterministic mode enabled
       if (app.storage.getSettings().deterministic === true) {
-        Body.setPositionImpulse(this.body, { x: 0, y: 0 });
-        Body.setConstraintImpulse(this.body, { x: 0, y: 0 });
+        this.body.positionImpulse.x = 0;
+        this.body.positionImpulse.y = 0;
+        this.body.constraintImpulse.x = 0;
+        this.body.constraintImpulse.y = 0;
+        this.body.constraintImpulse.angle = 0;
         Engine.clear(app.engine);
       }
 
@@ -299,8 +302,11 @@ class Player extends Cube {
 
     // Reset impulses and collision-pair cache if deterministic mode enabled
     if (app.storage.getSettings().deterministic === true) {
-      Body.setPositionImpulse(this.body, { x: 0, y: 0 });
-      Body.setConstraintImpulse(this.body, { x: 0, y: 0 });
+      this.body.positionImpulse.x = 0;
+      this.body.positionImpulse.y = 0;
+      this.body.constraintImpulse.x = 0;
+      this.body.constraintImpulse.y = 0;
+      this.body.constraintImpulse.angle = 0;
       Engine.clear(app.engine);
     }
 

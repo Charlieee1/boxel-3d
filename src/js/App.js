@@ -231,11 +231,12 @@ class App {
   }
 
   resizeWindow(e) {
-    var screenWidth = this.window.innerWidth;
-    var screenHeight = this.window.innerHeight;
-    this.camera.aspect = screenWidth / screenHeight;
+    this.screenWidth = this.window.innerWidth;
+    this.screenHeight = this.window.innerHeight;
+    this.camera.aspect = this.screenWidth / this.screenHeight;
     this.camera.updateProjectionMatrix();
-    this.graphics.setSize(screenWidth, screenHeight);
+    this.graphics.setSize(this.screenWidth, this.screenHeight);
+    this.updateJumpIndicator();
   }
 
   resetScene() {

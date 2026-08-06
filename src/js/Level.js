@@ -274,7 +274,8 @@ class Level extends Group {
       var child = this.children[i];
       child.resetToOrigin();
       child.updateMatrixWorld();
-      child.updateHelper();
+      // Not every child has a helper (ex: Rope) - a missing method here would throw and abort the loop, leaving later children un-reset
+      if (child.updateHelper) child.updateHelper();
     }
     app.player.jumpReady = true;
   }
