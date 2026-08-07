@@ -18,10 +18,6 @@
     onSettingsOpened();
   }
 
-  function setTheme() {
-    window.dispatchEvent(new CustomEvent('setTheme'));
-  }
-
   function showHelpers() {
     app.level.showHelpers(props['settings'].debug);
   }
@@ -103,10 +99,6 @@
           <span v-if="!isDebugValid" class="material-symbols-rounded" :data-title="i18n.t('settings.graphics.debug_badge')">verified_off</span>
           <span>{{ i18n.t('settings.graphics.debug_mode') }}</span>
         </label>
-      </div>
-      <div class="option">
-        <input type="checkbox" id="theme" :checked="settings.theme == 'origin'" @change="onChange('updateSettings', $event, { true: 'origin', false: 'bubble' }, setTheme)">
-        <label for="theme">{{ i18n.t('settings.graphics.old_ui') }}</label>
       </div>
     </div>
   </div>

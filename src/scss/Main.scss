@@ -94,16 +94,6 @@
         object-fit: cover;
         object-position: center;
       }
-
-      // Colour-shift tint over the shared background art, invisible at the '#000000' ("no tint") default
-      &:after {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background-color: var(--theme-bg-reshade, #000000);
-        opacity: var(--theme-bg-reshade-opacity, 0);
-        mix-blend-mode: color;
-      }
     }
 
     .nav {
@@ -131,20 +121,6 @@
         pointer-events: all;
         position: relative;
         text-shadow: 0em 0.125em 0em rgba(#000000, 0.25);
-
-        // Colour-shift tint over the button's own background. Negative z-index keeps it below
-        // the button's normal-flow icon/text content so the tint never covers them.
-        &:after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background-color: var(--theme-button-reshade, #000000);
-          opacity: var(--theme-button-reshade-opacity, 0);
-          mix-blend-mode: color;
-          pointer-events: none;
-          z-index: -1;
-        }
 
         &:hover {
           img,
@@ -277,20 +253,6 @@
                 animation-fill-mode: forwards;
               }
             }
-          }
-
-          // Colour-shift tint over every main menu button's own thumbnail art. z-index sits below
-          // .title/.label/.tag (z-index 2) so the tint never washes out their text.
-          .thumbnail:after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: var(--theme-corner-radius, 0.75em);
-            background-color: var(--theme-button-reshade, #000000);
-            opacity: var(--theme-button-reshade-opacity, 0);
-            mix-blend-mode: color;
-            pointer-events: none;
-            z-index: 1;
           }
 
           .thumbnail {
@@ -448,20 +410,6 @@
         pointer-events: all;
         position: relative;
         text-shadow: 0em 0.125em 0em rgba(#000000, 0.25);
-
-        // Colour-shift tint over the button's own background. Negative z-index keeps it below
-        // the button's normal-flow icon/text content so the tint never covers them.
-        &:after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          background-color: var(--theme-button-reshade, #000000);
-          opacity: var(--theme-button-reshade-opacity, 0);
-          mix-blend-mode: color;
-          pointer-events: none;
-          z-index: -1;
-        }
 
         &.disabled {
           pointer-events: none;
@@ -2325,6 +2273,12 @@
     .content .carousel .item .thumbnail img,
     .content .carousel .item .thumbnail .svg {
       border-radius: 0.75em;
+    }
+
+    // Matches Stats.vue's fixed icon-square rounding so the footer version button's blue icon
+    // stays visually consistent with the campaign FPS element's blue icon under Bubble
+    .footer .button .material-symbols-rounded {
+      border-radius: 0.5em;
     }
   }
 

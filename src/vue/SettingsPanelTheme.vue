@@ -72,28 +72,6 @@
         <input type="color" id="themeBgColor3" :value="settings.themeBgColor3" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option">
-        <label for="themeBgReshade">{{ i18n.t('settings.theme.bg_reshade') }}</label>
-        <input type="color" id="themeBgReshade" :value="settings.themeBgReshade" @change="$emit('updateSettings', $event)">
-      </div>
-      <div class="option">
-        <label for="themeBgReshadeOpacity">{{ i18n.t('settings.theme.bg_reshade_opacity') }}</label>
-      </div>
-      <div class="option">
-        <input type="range" id="themeBgReshadeOpacity" min="0" max="1" step="0.05" :value="settings.themeBgReshadeOpacity" @input="$emit('updateSettings', $event)">
-        <label for="themeBgReshadeOpacity">{{ settings.themeBgReshadeOpacity }}</label>
-      </div>
-      <div class="option">
-        <label for="themeButtonReshade">{{ i18n.t('settings.theme.button_reshade') }}</label>
-        <input type="color" id="themeButtonReshade" :value="settings.themeButtonReshade" @change="$emit('updateSettings', $event)">
-      </div>
-      <div class="option">
-        <label for="themeButtonReshadeOpacity">{{ i18n.t('settings.theme.button_reshade_opacity') }}</label>
-      </div>
-      <div class="option">
-        <input type="range" id="themeButtonReshadeOpacity" min="0" max="1" step="0.05" :value="settings.themeButtonReshadeOpacity" @input="$emit('updateSettings', $event)">
-        <label for="themeButtonReshadeOpacity">{{ settings.themeButtonReshadeOpacity }}</label>
-      </div>
-      <div class="option">
         <label for="themeAccentColor">{{ i18n.t('settings.theme.accent_color') }}</label>
         <input type="color" id="themeAccentColor" :value="settings.themeAccentColor" @change="$emit('updateSettings', $event)">
       </div>
