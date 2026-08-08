@@ -10,11 +10,13 @@
 - External resources
   - Level packs
   - Skins
+- Deterministic mode fine-control settings
 
 # QOL
 - Lines from teleport blocks to destinations
   - For gameplay, invalidating toggle like debug mode
   - For level editor, setting
+- Show only levels not completed by player in level select menu
 
 # Extra features
 - Gravity preservation glitch working for campaign levels

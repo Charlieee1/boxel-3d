@@ -269,14 +269,35 @@ class Level extends Group {
   }
 
   resetLevel() {
+    // TEMPORARY determinism diagnostic - marks the start of a new attempt. Every restart path
+    // (R key, automatic kill-restart, initial level entry) funnels through resetScene() -> here,
+    // making this the single reliable "a new attempt just began" hook. See App.js's
+    // detSyncAttempt/detCaptureTick. Remove this line alongside that diagnostic.
+    window.__detAttempt = (window.__detAttempt == null) ? 0 : window.__detAttempt + 1;
+
     // Gets called every time the level starts (including checkpoints)
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
-      child.resetToOrigin();
-      child.updateMatrixWorld();
-      // Not every child has a helper (ex: Rope) - a missing method here would throw and abort the loop, leaving later children un-reset
-      if (child.updateHelper) child.updateHelper();
+      // A throw from any one child (ex: a bad resyncBodyGeometry() case) must not abort the loop -
+      // every later child would silently stay un-reset (wrong position, stale velocity, etc), which is
+      // far worse and harder to diagnose than one object being skipped. Log which one failed so it's
+      // traceable from a single report instead of needing a repro round-trip.
+      try {
+        child.resetToOrigin();
+        child.updateMatrixWorld();
+        // Not every child has a helper (ex: Rope)
+        if (child.updateHelper) child.updateHelper();
+      } catch (e) {
+        console.error('resetLevel(): failed to reset child', child.getClass ? child.getClass() : child, e);
+      }
     }
+
+    // Every body is now at its final post-reset position - prune any activeSensorPairs entries that
+    // no longer correspond to genuine contact (see Collision.reconcileAfterReset for why this is
+    // needed: a deterministic-mode reset can teleport a body away from a sensor it was touching,
+    // without Matter ever getting the chance to fire a real collisionEnd for that pair).
+    app.collision.reconcileAfterReset();
+
     app.player.jumpReady = true;
   }
 
@@ -285,6 +306,17 @@ class Level extends Group {
     app.play = true;
     app.level.removeParticles();
     app.player.cancelRestart();
+
+    // Reset impulses and collision-pair cache if deterministic mode enabled - retryLevel() is the
+    // path the "R" key uses directly (PageCampaign.vue), bypassing Player.restart()/respawn() and
+    // their existing resetDeterministicPhysics() call entirely. resetScene() below zeroes each body's
+    // position/velocity via resetToOrigin(), but never touches positionImpulse/constraintImpulse or
+    // Matter's pair cache (warm-started contact impulses), so without this, an "R" restart carries
+    // that residual solver bias straight over from whatever happened before the restart.
+    if (app.storage.getSettings().deterministic === true) {
+      app.player.resetDeterministicPhysics();
+    }
+
     app.resetScene();
     window.dispatchEvent(new CustomEvent('closePopup'));
 

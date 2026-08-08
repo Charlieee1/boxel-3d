@@ -1,6 +1,6 @@
 import { DoubleSide, Mesh, MeshPhongMaterial, PlaneGeometry, SRGBColorSpace, TextureLoader, Vector2 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { Body, Engine, Query, Vector } from 'matter-js';
+import { Body, Composite, Detector, Engine, Query, Vector } from 'matter-js';
 import { Utility } from '../Utility.js';
 import { Cube } from './Cube.js';
 import { Rope } from '../Rope.js';
@@ -144,13 +144,22 @@ class Player extends Cube {
     if (this.mode == 'grapple' && this.isFrozen() == false){
       var spacing = 4; // Smaller = more precise
       var length = 400; // How far to check for objects beyond p2
-      var dx = mouse.x - this.position.x;
-      var dy = mouse.y - this.position.y;
+
+      // Anchor from the true physics position in deterministic mode - this.position is a
+      // render-interpolated value (see Cube.update's alpha blend) that can offset the rope's anchor
+      // by a wall-clock-timing-dependent amount; non-deterministic mode keeps the original
+      // (interpolated) source so existing runs/records made against that behavior stay comparable.
+      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().deterministic === true : false;
+      var originX = isDeterministic ? this.body.position.x : this.position.x;
+      var originY = isDeterministic ? -this.body.position.y : this.position.y;
+
+      var dx = mouse.x - originX;
+      var dy = mouse.y - originY;
       var distance = Math.sqrt(dx * dx + dy * dy);
-      var p1 = { x: this.position.x, y: -this.position.y };
-      var p2 = { 
-        x: (this.position.x + (mouse.x - this.position.x) * length / distance),
-        y: -(this.position.y + (mouse.y - this.position.y) * length / distance)
+      var p1 = { x: originX, y: -originY };
+      var p2 = {
+        x: (originX + (mouse.x - originX) * length / distance),
+        y: -(originY + (mouse.y - originY) * length / distance)
       };
 
       // Clear existing rope to prevent duplicate chains
@@ -216,14 +225,24 @@ class Player extends Cube {
       var particleColor = settings.deathParticleColor || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
+
+      // Spawn from the true physics position in deterministic mode - this.position is a
+      // render-interpolated value (see Cube.update's alpha blend) that can offset where these new
+      // physics bodies spawn by a wall-clock-timing-dependent amount; non-deterministic mode keeps
+      // the original (interpolated) source so existing runs/records made against that behavior stay
+      // comparable.
+      var isDeterministic = settings.deterministic === true;
+      var originX = isDeterministic ? this.body.position.x : this.position.x;
+      var originY = isDeterministic ? -this.body.position.y : this.position.y;
+
       for (var row = -rows / 2; row < rows / 2; row++) {
         for (var col = -cols / 2; col < cols / 2; col++) {
           var randAngle = this.util.randomNumber(0, 360 * (Math.PI / 180));
           var particleData = {
             color: particleColor,
             position: {
-              x: this.position.x + (col * scale.x) + (scale.x / 2),
-              y: this.position.y + (row * scale.y) + (scale.y / 2), 
+              x: originX + (col * scale.x) + (scale.x / 2),
+              y: originY + (row * scale.y) + (scale.y / 2),
               z: 0
             },
             rotation: { x: 0, y: 0, z: randAngle },
@@ -274,19 +293,35 @@ class Player extends Cube {
     }
   }
 
+  // Zero every body's warm-start solver bias (not just the player's) and clear the pair cache -
+  // Matter's Resolver carries positionImpulse/constraintImpulse across ticks to smooth out
+  // resolution (see Resolver.postSolvePosition), so leftover bias on nearby blocks would still
+  // nudge them post-respawn even though Engine.clear() itself only resets contact/pair history
+  resetDeterministicPhysics() {
+    var bodies = Composite.allBodies(app.engine.world);
+    for (var i = 0; i < bodies.length; i++) {
+      var body = bodies[i];
+      body.positionImpulse.x = 0;
+      body.positionImpulse.y = 0;
+      body.constraintImpulse.x = 0;
+      body.constraintImpulse.y = 0;
+      body.constraintImpulse.angle = 0;
+    }
+    Engine.clear(app.engine);
+
+    // Engine.clear() empties the detector's own body list (Detector.clear), but Matter only
+    // repopulates it inside Engine.update() when world.isModified is true (a body was added/removed) -
+    // resetToOrigin() only repositions existing bodies, it never adds/removes any, so without this,
+    // world.isModified stays false and detector.bodies would stay empty forever, silently disabling
+    // all collision detection from this point on.
+    Detector.setBodies(app.engine.detector, bodies);
+  }
+
   respawn(override = false) {
     // Override is used when a checkpoint set
     if (this.isFrozen() == true || override == true) {
-      // Reset impulses and collision-pair cache if deterministic mode enabled
-      if (app.storage.getSettings().deterministic === true) {
-        this.body.positionImpulse.x = 0;
-        this.body.positionImpulse.y = 0;
-        this.body.constraintImpulse.x = 0;
-        this.body.constraintImpulse.y = 0;
-        this.body.constraintImpulse.angle = 0;
-        Engine.clear(app.engine);
-      }
-
+      // Deterministic mode's impulse/pair-cache reset happens in Level.retryLevel() - this is only
+      // ever called from its checkpoint branch, which runs after that reset already.
       app.level.removeParticles();
       this.resetToOrigin();
       this.setPositionToCheckpoint();
@@ -300,16 +335,9 @@ class Player extends Cube {
     // Gate manual checkpoint respawn if disabled at level - automatic death respawn (from kill()) always bypasses this
     if (isAutomatic !== true && app.level.disableManualCheckpointRespawn === true) return;
 
-    // Reset impulses and collision-pair cache if deterministic mode enabled
-    if (app.storage.getSettings().deterministic === true) {
-      this.body.positionImpulse.x = 0;
-      this.body.positionImpulse.y = 0;
-      this.body.constraintImpulse.x = 0;
-      this.body.constraintImpulse.y = 0;
-      this.body.constraintImpulse.angle = 0;
-      Engine.clear(app.engine);
-    }
-
+    // Deterministic mode's impulse/pair-cache reset happens in Level.retryLevel() below, which this
+    // always calls - a single canonical reset point for every restart path (R key, automatic
+    // kill-restart, checkpoint respawn).
     app.level.retryLevel(true);
 
     // Dispatch restart event

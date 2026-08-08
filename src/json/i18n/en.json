@@ -149,6 +149,7 @@
       "autosave_minutes": "{n} min",
       "autosave_off": "Off",
       "death_particle_color": "Death Particle Colour",
+      "deterministic_badge": "Verified badge requires deterministic mode disabled",
       "deterministic_mode": "Deterministic Mode",
       "disable_textboxes": "Disable Textboxes",
       "old_backgrounds": "Old Backgrounds",

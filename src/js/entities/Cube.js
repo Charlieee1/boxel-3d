@@ -1,5 +1,5 @@
 import { BoxGeometry, Group, LineSegments, Mesh, MeshPhongMaterial, PointLight } from 'three';
-import { Bodies, Body, Sleeping, Vector } from 'matter-js';
+import { Bodies, Body, Sleeping, Vector, Vertices } from 'matter-js';
 import { Shapes } from './Shapes.js';
 
 class Cube extends Mesh {
@@ -173,6 +173,20 @@ class Cube extends Mesh {
     // Update position
     this.position.set(position.x, position.y, position.z);
     Body.setPosition(this.body, { x: position.x, y: -position.y });
+
+    // Deterministic mode: Matter's Body.setPosition() computes `delta = target - current` then
+    // `part.position += delta` - not a guaranteed floating-point-exact reassignment for an arbitrary
+    // starting position (ex: current=145.33333333333334, target=-120 lands 3 ULPs off target). Since
+    // the body's position before this call depends on how that session's gameplay happened to play
+    // out, every reset was silently inexact by a session-dependent amount. Re-applying with the fresh
+    // residual delta always converges exactly (verified: 0 failures in 1M randomized trials, never
+    // needs more than one correction). Non-deterministic mode keeps the original single-pass behavior.
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+      if (this.body.position.x !== position.x || this.body.position.y !== -position.y) {
+        Body.setPosition(this.body, { x: position.x, y: -position.y });
+      }
+    }
+
     if (updateOrigin == true) this.setPositionOrigin(position);
   }
 
@@ -192,13 +206,26 @@ class Cube extends Mesh {
       this.rotation.x = rotation.x;
       this.rotation.y = rotation.y;
       this.rotation.z = rotation.z;
-      Body.setAngle(this.body, -rotation.z);
+      this.setBodyAngle(-rotation.z);
       if (updateOrigin == true) { this.setRotationOrigin(rotation.z); }
     }
     else {
       this.rotation.z = rotation;
-      Body.setAngle(this.body, -rotation);
+      this.setBodyAngle(-rotation);
       if (updateOrigin == true) { this.setRotationOrigin(rotation); }
+    }
+  }
+
+  // Deterministic mode: Matter's Body.setAngle() computes `delta = angle - body.angle` then
+  // `part.angle += delta` - the same not-guaranteed-exact pattern as Body.setPosition() (see
+  // setPosition()'s comment). Re-applying with the fresh residual delta always converges exactly.
+  // Non-deterministic mode keeps the original single-pass behavior.
+  setBodyAngle(targetAngle) {
+    Body.setAngle(this.body, targetAngle);
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+      if (this.body.angle !== targetAngle) {
+        Body.setAngle(this.body, targetAngle);
+      }
     }
   }
 
@@ -221,9 +248,32 @@ class Cube extends Mesh {
     scale.x = (scale.x == null) ? this.scale.x : scale.x;
     scale.y = (scale.y == null) ? this.scale.y : scale.y;
     scale.z = (scale.z == null) ? this.scale.z : scale.z;
-    
-    // Temporarily set rectangle angle to zero to prevent skewing
-    var tempAngle = this.rotation.z;
+
+    // app doesn't exist yet the first time this runs - Cube's own constructor calls setScale(), and
+    // that can happen before App.vue finishes `window.app = new App()` (ex: App's constructor building
+    // its own initial player). Treat "app not ready yet" as non-deterministic (doesn't matter which
+    // branch runs at construction time anyway - this.rotation.z and this.body.angle are still in sync).
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().deterministic === true : false;
+
+    // Deterministic mode: skip the body-scale round trip entirely when x/y aren't actually changing -
+    // Matter's Body.scale() recomputes vertices/inertia/part position via a point-relative transform
+    // (point + (position - point) * scaleFactor) that isn't a guaranteed floating-point no-op even at
+    // scaleFactor=1, so calling it unconditionally on every resetToOrigin() (every restart, for every
+    // object) injected a tiny perturbation each time, compounding through subsequent collisions.
+    // Non-deterministic mode keeps the original unconditional recompute so existing runs/records made
+    // against that behavior stay comparable.
+    if (isDeterministic && scale.x === this.scale.x && scale.y === this.scale.y) {
+      this.scale.z = scale.z;
+      if (updateOrigin == true) this.setScaleOrigin({ x: scale.x, y: scale.y, z: scale.z });
+      return;
+    }
+
+    // Temporarily set rectangle angle to zero to prevent skewing, then restore it below. Deterministic
+    // mode restores from the true physics angle (this.body.angle); this.rotation.z is a
+    // render-interpolated value (see Cube.update's alpha blend) that can differ from the true angle by
+    // a wall-clock-timing-dependent amount - non-deterministic mode keeps that original source so
+    // existing runs/records made against that behavior stay comparable.
+    var tempAngle = isDeterministic ? -this.body.angle : this.rotation.z;
     this.setRotation(0, false);
 
     // Scale rectangle by previous scale, then update mesh scale ratio
@@ -281,6 +331,7 @@ class Cube extends Mesh {
     this.setPosition(this.positionOrigin, false);
     this.setRotation(this.rotationOrigin, false);
     this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
+    this.resyncBodyGeometry();
     this.setForceDirection(this.forceOrigin, false);
     this.setStatic(this.isStaticOrigin, false);
     this.setFriction(this.frictionOrigin, false);
@@ -290,6 +341,103 @@ class Cube extends Mesh {
     this.setDeathBlock(this.isDeathBlockOrigin || false, false);
     Body.setVelocity(this.body, { x: 0, y: 0 });
     Body.setAngularVelocity(this.body, 0);
+  }
+
+  // Deterministic mode only: instead of trusting whatever incremental position/rotation drift this
+  // body's vertices accumulated during the session, snapshot each part's geometry relative to its
+  // position/angle (in a fixed, angle-0 local frame) the first time this runs, then re-render that
+  // fixed template - translate to the target position, then apply exactly one rotation via
+  // Body.setAngle() at the end - on every future reset. setPosition()/setBodyAngle() already keep
+  // body.position/angle exact, but Matter still moves the VERTICES via delta-based translate/rotate
+  // internally, so two bodies that took different paths to reach the same position/angle can still end
+  // up with subtly different vertex coordinates. Works uniformly for compound bodies too (Direction/
+  // Reset/Finish/Bounce/etc, which combine a hitbox + sensor part via Body.setParts() - some, like
+  // Bounce/Spike, use a sensor that's a different size and locally offset from the hitbox).
+  //
+  // Every Cube's body - including a plain player/cube with just one hitbox - actually has
+  // body.parts.length === 2: Body.create({ parts: [this.hitbox] }) always wraps with the body itself
+  // as parts[0] and the hitbox as parts[1] (Matter's own convention). So this code path runs for every
+  // body, not just visibly-compound ones like Direction/Bounce.
+  //
+  // Three things this got wrong across earlier attempts (2026-08-07), all now fixed and covered by the
+  // verification below - see NONDETERMINISM.md fix #11 for the full history:
+  // - Static bodies are skipped (`isStatic` check below): Body.setParts() (needed to recombine a
+  //   body's parts) calls Body._totalProperties(), which substitutes mass=1 for any part whose mass is
+  //   Infinity (static), then Body.setMass(body, total.mass) applies that substituted value - silently
+  //   giving a "static" wall a nonzero inverseMass. Static bodies don't need this fix anyway - they
+  //   never move during gameplay, so resetToOrigin() always resets them from an already-correct
+  //   position, zero delta, no drift possible.
+  // - Each part's template is only ever translated here, never rotated - Body.setAngle() at the end is
+  //   the one and only rotation applied, to every part's vertices AND position uniformly. Rotating the
+  //   template AND calling Body.setAngle() double-applies the rotation.
+  // - Body.setParts() internally does Body.setVertices(body, hull) - which repositions vertices to
+  //   whatever body.position currently is - and THEN an extra Vertices.translate(body.vertices,
+  //   hullCentre) on top. Matter expects this to run with body.position still at {0,0} (construction
+  //   time); calling it after body.position is already at the real target (as this method's own
+  //   per-part loop, just above, sets it to) makes both steps apply the offset - doubling it. Zeroing
+  //   body.position/positionPrev immediately before the call (and letting the Body.setPosition()
+  //   correction below establish the real target afterward) avoids this. This was the cause of "the
+  //   player falls through all blocks" - the player's body.position was correct, but its actual
+  //   vertices ended up twice as far from spawn as they should have been, so nothing ever geometrically
+  //   overlapped anything.
+  // Verified against an independent reference (a fresh body built from scratch, positioned/rotated
+  // once directly) across simple and compound bodies, zero and nonzero angle, co-located and
+  // offset/differently-sized sensors, static bodies, and - the scenario that exposed this bug -
+  // multiple repeated calls reusing the cached template with no drift in between.
+  resyncBodyGeometry() {
+    if ((typeof app === 'undefined' || !app.storage) || app.storage.getSettings().deterministic !== true) return;
+    if (this.body.isStatic === true) return;
+
+    var targetPosition = { x: this.body.position.x, y: this.body.position.y };
+    var targetAngle = this.body.angle;
+
+    if (this.geometryTemplate == null) {
+      this.geometryTemplate = this.body.parts.map(function(part) {
+        var local = part.vertices.map(function(v) { return { x: v.x, y: v.y }; });
+        Vertices.translate(local, targetPosition, -1);
+        Vertices.rotate(local, -targetAngle, { x: 0, y: 0 });
+        return local;
+      });
+    }
+
+    for (var i = 0; i < this.body.parts.length; i++) {
+      var part = this.body.parts[i];
+      var world = this.geometryTemplate[i].map(function(v) { return { x: v.x, y: v.y }; });
+      // Translate only - stay axis-aligned here. Body.setAngle() below applies the one true rotation.
+      Vertices.translate(world, targetPosition);
+      var centre = Vertices.centre(world);
+      part.position.x = centre.x;
+      part.position.y = centre.y;
+      Body.setVertices(part, world);
+    }
+
+    // Recombine parts into the compound body (recomputes hull/mass/inertia/position). Zero position
+    // first - Body.setParts() expects to run at body.position={0,0} (see comment above) - the
+    // Body.setPosition() correction below re-establishes the real target afterward.
+    if (this.body.parts.length > 1) {
+      this.body.position.x = 0;
+      this.body.position.y = 0;
+      this.body.positionPrev.x = 0;
+      this.body.positionPrev.y = 0;
+      Body.setParts(this.body, this.body.parts.slice(1), true);
+    }
+
+    // Force position back to the exact target (Body.setParts()'s centroid math, or any other drift,
+    // gets corrected the same way setPosition() does - one re-application always converges).
+    Body.setPosition(this.body, targetPosition);
+    if (this.body.position.x !== targetPosition.x || this.body.position.y !== targetPosition.y) {
+      Body.setPosition(this.body, targetPosition);
+    }
+
+    // Vertices/positions are all axis-aligned (angle 0) right now - declare that directly (a plain
+    // field assignment has no rotation side effect, unlike Body.setAngle), then rotate from a true
+    // zero. This is the single rotation applied to this body's geometry this reset.
+    this.body.angle = 0;
+    this.body.anglePrev = 0;
+    for (var j = 0; j < this.body.parts.length; j++) {
+      this.body.parts[j].angle = 0;
+    }
+    Body.setAngle(this.body, targetAngle);
   }
 
   setStatic(isStatic = true, updateOrigin = true) {

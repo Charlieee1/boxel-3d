@@ -30,4 +30,4 @@ Format: plain semver (`X.Y.Z`), currently unrelated in scale/meaning to the disp
 | `src-tauri/tauri.conf.json` (`version` field) | Desktop (Tauri) build version - shown in OS-level app info/installers |
 | `android/app/build.gradle` (`versionName`/`versionCode`) | Android build version - shown in Play Store/app info |
 
-These are meant to move together when doing a build/release, but there's no automated sync - bumping one doesn't bump the others. As of 2026-07-22, `package.json` and `files/json/firefox/manifest.json` are both at `1.1.0`; `tauri.conf.json` and `android/app/build.gradle` are still at `1.0.0` - worth reconciling before cutting a desktop or Android build.
+These are meant to move together when doing a build/release, but there's no automated sync - bumping one doesn't bump the others. As of 2026-08-07, `package.json`, `files/json/firefox/manifest.json`, and `src-tauri/tauri.conf.json` are at `1.2.2`; `android/app/build.gradle` was deliberately left at `1.2.0` (`versionCode 35`) and needs reconciling before cutting an Android build.

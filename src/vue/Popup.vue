@@ -81,6 +81,11 @@
   }
 
   function runCallback(callback, e) {
+    // A mouse-clicked button/input keeps DOM focus after this popup closes, which can make the very
+    // next keyboard action look like it's still typing into that element (ex: page-level keydown
+    // handlers that gate on the focused element) - blur so keyboard input is immediately usable again
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+
     if (callback == null) callback = closePopup;
     callback(e);
   }
@@ -165,4 +170,7 @@
 <style>
   .fade-bubble-popup-enter-active, .fade-bubble-popup-leave-active { transition: opacity 0.1s ease; }
   .fade-bubble-popup-enter-from, .fade-bubble-popup-leave-to { opacity: 0; }
+  /* Still in the DOM during its 0.1s fade-out - without this it keeps swallowing clicks meant for
+     whatever's underneath (ex: canvas) until the transition finishes */
+  .fade-bubble-popup-leave-active { pointer-events: none; }
 </style>

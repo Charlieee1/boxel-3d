@@ -9,6 +9,9 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.3-m1.2.2
+Fixed deterministic mode
+
 v2.9.3-m1.2.1
 Fixed deterministic mode bugs
 Fixed jump indicator bug

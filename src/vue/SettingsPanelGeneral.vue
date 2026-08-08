@@ -1,10 +1,13 @@
 <script setup>
+  import { onMounted, onUnmounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
 
   const i18n = useI18n({ useScope: 'global' });
   const app = window.app;
   const props = defineProps(['settings']);
   const emit = defineEmits(['updateSettings']);
+
+  const isDeterministicValid = ref(false);
 
   // Editor snap of 0 isn't a valid increment, coerce it to 1 like old UI did
   function onSnapChange(e) {
@@ -13,6 +16,33 @@
     e.target.value = snap;
     emit('updateSettings', e);
   }
+
+  function onChange(...args) {
+    // Emit event to parent component
+    emit(...args);
+
+    // Update settings state
+    onSettingsOpened();
+  }
+
+  function onSettingsOpened() {
+    isDeterministicValid.value = app.isDeterministicValid();
+  }
+
+  function onSettingsClosed() {
+    isDeterministicValid.value = true;
+  }
+
+  // Run function after being mounted (visible)
+  onMounted(function() {
+    window.addEventListener('settingsOpened', onSettingsOpened);
+    window.addEventListener('settingsClosed', onSettingsClosed);
+  });
+
+  onUnmounted(function() {
+    window.removeEventListener('settingsOpened', onSettingsOpened);
+    window.removeEventListener('settingsClosed', onSettingsClosed);
+  });
 </script>
 <template>
   <div class="panel">
@@ -53,8 +83,11 @@
         <label for="showJumpIndicator">{{ i18n.t('settings.general.show_jump_indicator') }}</label>
       </div>
       <div class="option">
-        <input type="checkbox" id="deterministic" :checked="settings.deterministic == true" @change="$emit('updateSettings', $event)">
-        <label for="deterministic">{{ i18n.t('settings.general.deterministic_mode') }}</label>
+        <input type="checkbox" id="deterministic" :checked="settings.deterministic == true" @change="onChange('updateSettings', $event)">
+        <label for="deterministic">
+          <span v-if="!isDeterministicValid" class="material-symbols-rounded" :data-title="i18n.t('settings.general.deterministic_badge')">verified_off</span>
+          <span>{{ i18n.t('settings.general.deterministic_mode') }}</span>
+        </label>
       </div>
       <div class="option">
         <input type="checkbox" id="saveInvalidRuns" :checked="settings.saveInvalidRuns !== false" @change="$emit('updateSettings', $event)">

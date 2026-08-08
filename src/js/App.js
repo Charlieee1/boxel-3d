@@ -124,7 +124,14 @@ class App {
     this.window.addEventListener('resize', function(e) { this.resizeWindow(e); }.bind(this));
     this.window.addEventListener('message', e => this.onMessage(e));
     Events.on(this.engine, 'collisionStart', function(e) { this.collision.checkPlayerCollision(e); }.bind(this));
-    
+    Events.on(this.engine, 'collisionEnd', function(e) { this.collision.checkCollisionEnd(e); }.bind(this));
+
+    // TEMPORARY determinism diagnostic (app-code only, matter-js untouched) - records every
+    // collisionStart/collisionEnd pair, tagged with the tick it happened on, into the current attempt.
+    // See updateEngine's detSyncAttempt/detCaptureTick for the rest. Remove alongside those.
+    Events.on(this.engine, 'collisionStart', function(e) { this.detLogCollisions('start', e.pairs); }.bind(this));
+    Events.on(this.engine, 'collisionEnd', function(e) { this.detLogCollisions('end', e.pairs); }.bind(this));
+
     // Load assets, then load game
     this.assets.load(function() {
       this.load(callback);
@@ -159,6 +166,10 @@ class App {
   updateEngine({ delay }) {
     // Update engine to loop engine rate
     if (this.play == true) {
+      // TEMPORARY determinism diagnostic - opens a new attempt bucket if Level.resetLevel() marked
+      // one since the last tick, see detSyncAttempt
+      this.detSyncAttempt();
+
       // Update player object
       this.player.updateControls();
       this.player.updateForce();
@@ -168,10 +179,91 @@ class App {
       // Update world engine
       Engine.update(this.engine, delay);
 
+      // TEMPORARY determinism diagnostic - per-tick body state for the current attempt
+      this.detCaptureTick();
+
       // Dispatch engine event
       this.eventEngineUpdated.detail.delay = delay;
       window.dispatchEvent(this.eventEngineUpdated);
     }
+  }
+
+  // TEMPORARY determinism diagnostic (app-code only, matter-js untouched). Captures up to 8 restart
+  // attempts (each new attempt detected via Level.resetLevel's window.__detAttempt marker - covers
+  // "R", automatic kill-restart, and initial level entry), up to 150 ticks each. Play through several
+  // restarts, then run this once in devtools to grab everything:
+  //   copy(JSON.stringify(window.__detAttempts))
+  // Remove detLabel/detSyncAttempt/detCurrentAttempt/detCaptureTick/detLogCollisions and their call
+  // sites (here, updateEngine, and the two extra Events.on registrations near canvas listeners) once
+  // the divergence is diagnosed.
+  detLabel(object3D) {
+    var origin = (object3D && object3D.positionOrigin) || { x: 0, y: 0 };
+    var cls = (object3D && object3D.getClass) ? object3D.getClass() : 'unknown';
+    return cls + '@' + Math.round(origin.x) + ',' + Math.round(origin.y);
+  }
+
+  detSyncAttempt() {
+    if (window.__detAttempts == null) window.__detAttempts = [];
+    var attemptIndex = window.__detAttempt == null ? 0 : window.__detAttempt;
+    if (window.__detAttempts.length > attemptIndex) return; // bucket already open
+    if (window.__detAttempts.length >= 8) return; // cap reached, stop opening new buckets
+
+    var start = Composite.allBodies(this.engine.world).map(function(body) {
+      var object3D = body.parent && body.parent.object3D;
+      return {
+        label: this.detLabel(object3D),
+        isStatic: body.isStatic, isSensor: body.isSensor,
+        x: body.position.x, y: body.position.y, angle: body.angle,
+        friction: body.friction, restitution: body.restitution,
+        // TEMPORARY - checking the actual geometry resyncBodyGeometry() produces, since the bug is
+        // suspected to be in that vertex-resetting code rather than sleeping/collisionFilter state.
+        vertices: body.vertices.map(function(v) { return [v.x, v.y]; }),
+        bounds: { minX: body.bounds.min.x, minY: body.bounds.min.y, maxX: body.bounds.max.x, maxY: body.bounds.max.y },
+        area: body.area
+      };
+    }.bind(this));
+
+    window.__detAttempts.push({ attempt: attemptIndex, start: start, trace: [], collisions: [] });
+    if (window.__detAttempts.length == 8) {
+      console.log('[det-trace] 8 attempts opened - once the last one has run a bit, run: copy(JSON.stringify(window.__detAttempts))');
+    }
+  }
+
+  detCurrentAttempt() {
+    if (window.__detAttempts == null || window.__detAttempts.length == 0) return null;
+    return window.__detAttempts[window.__detAttempts.length - 1];
+  }
+
+  detCaptureTick() {
+    var current = this.detCurrentAttempt();
+    if (current == null || current.trace.length >= 150) return;
+    var tick = current.trace.length;
+    var bodies = Composite.allBodies(this.engine.world).filter(function(body) { return body.isStatic == false; }).map(function(body) {
+      var object3D = body.parent && body.parent.object3D;
+      return {
+        label: this.detLabel(object3D),
+        x: body.position.x, y: body.position.y, angle: body.angle,
+        vx: body.velocity.x, vy: body.velocity.y, av: body.angularVelocity,
+        pix: body.positionImpulse.x, piy: body.positionImpulse.y,
+        cix: body.constraintImpulse.x, ciy: body.constraintImpulse.y, cia: body.constraintImpulse.angle
+      };
+    }.bind(this));
+    current.trace.push({ tick: tick, bodies: bodies });
+  }
+
+  detLogCollisions(type, pairs) {
+    var current = this.detCurrentAttempt();
+    if (current == null || current.trace.length >= 150) return;
+    var tick = current.trace.length;
+    pairs.forEach(function(pair) {
+      var aObject3D = pair.bodyA.parent && pair.bodyA.parent.object3D;
+      var bObject3D = pair.bodyB.parent && pair.bodyB.parent.object3D;
+      current.collisions.push({
+        tick: tick, type: type,
+        a: this.detLabel(aObject3D), b: this.detLabel(bObject3D),
+        depth: pair.collision ? pair.collision.depth : null
+      });
+    }.bind(this));
   }
 
   updateRender({ delta, alpha }) {
