@@ -440,6 +440,14 @@
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
     // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
     app.levelEditor.applyTempSpawn();
+    app.player.cancelRestart(); // same cleanup App.playLevel()/Level.retryLevel() do - this is a 3rd "start playing" entry point they don't cover
+    // Deterministic mode only: App.playLevel()/Level.retryLevel() reset gravity to default too - a gravity
+    // block's trigger otherwise carries over across pause/play. Non-deterministic mode never reset gravity
+    // here before, so this stays opt-in to avoid changing existing (non-deterministic) editor behavior.
+    if (app.storage.getSettings().deterministic === true) {
+      app.player.resetDeterministicPhysics();
+      app.updateGravity();
+    }
     app.startLevel();
   }
 

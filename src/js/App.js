@@ -707,6 +707,9 @@ class App {
 
     // Load level if json exists
     if (options.json) {
+      app.player.cancelRestart(); // clear stale kill()-timer/physics-bias carryover from a prior level, same as retryLevel() does
+      if (app.storage.getSettings().deterministic === true) app.player.resetDeterministicPhysics();
+
       var storageSettings = this.storage.getSettings();
       var title = options.json.name;
       var description = this.level.getDescriptionByTitle(title)

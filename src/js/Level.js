@@ -248,7 +248,7 @@ class Level extends Group {
 
   importFromJSON(levelData) {
     this.name = levelData.name;
-    this.theme = levelData.theme;
+    this.theme = levelData.theme || this.defaultTheme;
     this.defaultBlockColor = levelData.defaultBlockColor || null;
     this.description = levelData.description;
     this.zoom = levelData.zoom;

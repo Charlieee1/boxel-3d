@@ -327,6 +327,19 @@ class Cube extends Mesh {
   }
 
   resetToOrigin() {
+    // Deterministic mode only: zero velocity BEFORE repositioning - Matter's Bounds.update() (called
+    // internally by setPosition/setRotation/resyncBodyGeometry below) pads body.bounds by the body's
+    // CURRENT velocity as a swept broadphase margin. Since the unconditional zeroing below runs AFTER
+    // those calls, every bounds recompute during this reset would otherwise use the stale pre-reset
+    // velocity, inflating bounds by a since-discarded amount - unlike a freshly-constructed body, whose
+    // velocity is genuinely zero the whole time. That mismatch changes Detector's broadphase sort order
+    // (keyed on bounds.min.x) between a reused and a fresh body, changing collision resolution order for
+    // anything with simultaneous/overlapping contacts. Non-deterministic mode keeps the original
+    // unconditional-zero-at-the-end ordering untouched, so vanilla physics is bit-for-bit unaffected.
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+      Body.setVelocity(this.body, { x: 0, y: 0 });
+      Body.setAngularVelocity(this.body, 0);
+    }
     this.hide(false); // reveal
     this.setPosition(this.positionOrigin, false);
     this.setRotation(this.rotationOrigin, false);

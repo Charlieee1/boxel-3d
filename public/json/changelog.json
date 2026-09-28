@@ -925,5 +925,12 @@
     "revisions": [
       "Fixed deterministic mode"
     ]
+  },
+  {
+    "version": "2.9.3-m1.2.2",
+    "revisions": [
+      "Fixed deterministic mode",
+      "Fixed bug when level had no set theme"
+    ]
   }
 ]

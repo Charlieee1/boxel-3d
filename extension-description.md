@@ -9,6 +9,10 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.3-m1.2.3
+Fixed deterministic mode
+Fixed bug when level had no set theme
+
 v2.9.3-m1.2.2
 Fixed deterministic mode
 

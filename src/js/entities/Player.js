@@ -306,6 +306,9 @@ class Player extends Cube {
       body.constraintImpulse.x = 0;
       body.constraintImpulse.y = 0;
       body.constraintImpulse.angle = 0;
+      body.motion = 0; // Sleeping.update's biased average, not reset by resetToOrigin's setVelocity(0)
+      body.sleepCounter = 0; // ticks-below-threshold counter, same as a freshly-built body starts with
+      body.isSleeping = false; // a body asleep from the last run stays asleep - Engine skips gravity/integration for it entirely
     }
     Engine.clear(app.engine);
 

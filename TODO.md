@@ -1,22 +1,71 @@
+# Bugs
+- When finishing a level with a custom zoom value, zoom value (and lock) carries over
+- Localstorage only some parts deleted occasionally
+- Pressing reset level in level editor doesn't reset cam pos
+  - Keybind sometimes doesn't reset cam pos (resets to 0,0 sometimes)
+  - Camera sometimes messed up when playtesting level after failing to reset cam pos in editor mode
+  - Messed up camera pos leads to wrong rotation, and rotation is preserved into gameplay
+- Undo/redo doesn't work
+- Multiselect only selects centres of blocks
+- Guide is very unclear
+- Reset button doesn't pause game
+- Reset block doesn't cancel camera rotation
+- Power block doesn't keep jump indicator on
+- Physics changes in nondeterministic mode
+- Manual respawn should be enabled during death animation when manual respawn property set to false
+- Jump indicator doesn't hide in pause, finish, or settings menus
+- Level being loaded in level editor without theme crashes (might be same in level packs)
+- Possible bug with checkpoint position deterministic mode
+- Textbox text not modifiable
+- Settings menu isn't consistent in main menu and level editor (tab missing in main menu)
+- Jump indicator changes visual size relative to play depending on screen size
+  - All UI
+- Pressing "e" acts as level reset in level editor instead of pause
+  - Reset and pause buttons functionality switched
+  - Reset doesn't reset player checkpoint property
+  - Sometimes resets player to 0,0 or to checkpoint instead of origin position
+- Zoom setting marked as invalid when zooming out in level editor
+- Search query in new level selector disappears
+- Opening settings then pressing "r" restarts the level and resumes the game
+- Jumping carrying over into restart should disable the automatic jump refresh at the start of levels/after respawns
+- Right click to rotate camera in editor deletes blocks
+- Checkpoints don't play sounds when disabled
+- Enabling debug mode doesn't immediately show hitboxes
+- Deterministic mode doesn't work on level ARGHHHH
+- Respawn timer doesn't reset when exiting level
+- ARGHHHHHH is an auto level
+- Splash park in main pack is by ember
+- Wavemachine optimized is modified by charlie
+- Settings button doesn't pause gameplay in level editor
+- Jump restored when respawning
+- Mimic old UI properly
+
 # Level editor improvements
 - Saved object groups
 - Allow combinations of modes and easy switching
 - Plugins
 - Group modify (be able to change many models at once)
 - Gameplay/deco layers
+- Level editor camera while gameplay is running (player death does not restart level)
 - Level editor guide
+- Proper intangible objects
 
 # Settings
 - External resources
   - Level packs
   - Skins
 - Deterministic mode fine-control settings
+- Cap FPS to 60 (disable interpolation)
+- Anti lag (does extra physics simulation calls between rendering calls to catch up)
+- Change max zoom on slider to 1k (for level properties too)
+- Separate moving background from rotating camera
 
 # QOL
 - Lines from teleport blocks to destinations
   - For gameplay, invalidating toggle like debug mode
   - For level editor, setting
 - Show only levels not completed by player in level select menu
+- Change max zoom in editor to 5k
 
 # Extra features
 - Gravity preservation glitch working for campaign levels
@@ -47,3 +96,4 @@
     - Intangibility
     - Visibility
     - Level-specific UI
+- Multi-layer physics
