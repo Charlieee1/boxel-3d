@@ -168,7 +168,7 @@
     var description = e.detail.description;
     var data = {
       type: 'message',
-      name: settings.name,
+      name: settings.multiplayer.name,
       text: 'Is now playing <a href="' + title + '">' + description + '</a> ▶️',
       time: getTime(),
       color: '#4cff64',
@@ -188,7 +188,7 @@
     var settings = app.storage.getSettings();
     var data = {
       type: 'message',
-      name: settings.name,
+      name: settings.multiplayer.name,
       text: 'Finished <a href="' + title + '">' + description + '</a> in 🕒<strong>' + time + 's</strong>',
       time: getTime(),
       color: '#4cff64',
@@ -208,7 +208,7 @@
       if (message.value.value == '') return; // Prevent sending empty data
       data = {
         type: 'message',
-        name: settings.name + (isHost() ? ' [host]' : ''),
+        name: settings.multiplayer.name + (isHost() ? ' [host]' : ''),
         text: message.value.value,
         time: getTime(),
         color: '#ffcc4d',
@@ -294,7 +294,7 @@
 
       // Update progress
       settings = app.storage.getSettings();
-      settings.progress = app.level.getLevelIndex(options.title) + 1;
+      settings.selectedLevel = app.level.getLevelIndex(options.title) + 1;
       app.updateSettings(settings);
 
       // Run optional success callback

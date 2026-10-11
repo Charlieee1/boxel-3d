@@ -27,7 +27,8 @@
 
   function updatePlayerSkin(e) {
     var skin = e.detail;
-    settings.value.skin = { id: skin.id, title: skin.title, url: skin.url };
+    settings.value = app.storage.getSettings(); // Re-read so changes made since opening this page are kept
+    settings.value.general.skin = { id: skin.id, title: skin.title, url: skin.url };
     if (skin.id == 680) {
       // Open custom skin options
       window.dispatchEvent(new CustomEvent('openPopup', {
@@ -53,7 +54,8 @@
       var reader = new FileReader();
       reader.onloadend = function() {
         var skin = { id: 680, title: file.name, url: reader.result };
-        settings.value.skin = skin;
+        settings.value = app.storage.getSettings();
+        settings.value.general.skin = skin;
         app.player.setSkin(skin);
         app.updateSettings(settings.value);
         window.dispatchEvent(new CustomEvent('closePopup'));
@@ -83,7 +85,7 @@
   }
 
   function selectSkinFromStorage() {
-    var id = settings.value.skin.id;
+    var id = settings.value.general.skin.id;
     skins.forEach(function(skin) {
       if (skin.id == id) {
         defaultSkin.value = skin;

@@ -20,9 +20,9 @@
     
     // Connect to network
     if (isOnline()) {
-      app.network.connect(props['settings'].connection, {
+      app.network.connect(props['settings'].multiplayer.connection, {
         metadata: {
-          name: props['settings'].name,
+          name: props['settings'].multiplayer.name,
           uuid: app.player.uuid,
           time: app.multiplayer.getTime()
         }
@@ -32,7 +32,7 @@
       // Create peer then connect to host
       app.network.on('peer_open', connect);
       app.network.on('peer_error', error)
-      app.network.open(props['settings'].peer);
+      app.network.open(props['settings'].multiplayer.peer);
     }
   }
 
@@ -64,8 +64,8 @@
     }
     else {
       app.network.on('peer_error', error)
-      app.network.open(props['settings'].peer);
-      app.multiplayer.setHost(props['settings'].peer);
+      app.network.open(props['settings'].multiplayer.peer);
+      app.multiplayer.setHost(props['settings'].multiplayer.peer);
     }
   }
 
@@ -85,7 +85,7 @@
   }
 
   function changePeerId() {
-    return { target: { id: 'peer', value: app.storage.generateHex('') }};
+    return { target: { id: 'peer', dataset: { setting: 'multiplayer.peer' }, value: app.storage.generateHex('') }};
   }
 </script>
 <template>
@@ -94,7 +94,7 @@
     <div class="group gap">
       <div class="option wrap">
         <label for="name">{{ i18n.t('settings.multiplayer.your_name') }}</label>
-        <input type="text" id="name" autocomplete="off" :value="settings.name" @change="$emit('updateSettings', $event)">
+        <input type="text" id="name" data-setting="multiplayer.name" autocomplete="off" :value="settings.multiplayer.name" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option gap">
         <button :class="{ 'selected': peerMode == 'guest' }" class="center flex-basis-50" @click="peerMode = 'guest'">
@@ -113,10 +113,11 @@
             <input
               type="text"
               id="connection"
+              data-setting="multiplayer.connection"
               autocomplete="off"
               maxlength="6"
               class="flex-basis-50"
-              :value="settings.connection"
+              :value="settings.multiplayer.connection"
               :placeholder="`ex: DC265A`"
               @change="$emit('updateSettings', $event)"
             >
@@ -136,8 +137,8 @@
               maxlength="6"
               class="flex-basis-50"
               readonly
-              :class="{ 'hex': settings.peer.length <= 6 }"
-              :value="settings.peer"
+              :class="{ 'hex': settings.multiplayer.peer.length <= 6 }"
+              :value="settings.multiplayer.peer"
               @click="copyInput($event)"
             >
             <div class="option flex-basis-50" v-if="peerMode == 'host'">

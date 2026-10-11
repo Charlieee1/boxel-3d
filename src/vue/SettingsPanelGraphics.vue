@@ -19,7 +19,7 @@
   }
 
   function showHelpers() {
-    app.level.showHelpers(props['settings'].debug);
+    app.level.showHelpers(props['settings'].invalidatingSettings.hitboxes);
   }
 
   function onSettingsOpened() {
@@ -34,14 +34,22 @@
     zoomDisabled.value = false;
   }
 
+  // Read storage directly since props may not be refreshed yet
+  function onSettingsImported() {
+    onSettingsOpened();
+    app.level.showHelpers(app.storage.getSettings().invalidatingSettings.hitboxes);
+  }
+
   // Run function after being mounted (visible)
   onMounted(function() {
     window.addEventListener('settingsOpened', onSettingsOpened);
+    window.addEventListener('settingsImported', onSettingsImported);
     window.addEventListener('settingsClosed', onSettingsClosed);
   });
 
   onUnmounted(function() {
     window.removeEventListener('settingsOpened', onSettingsOpened);
+    window.removeEventListener('settingsImported', onSettingsImported);
     window.removeEventListener('settingsClosed', onSettingsClosed);
   });
 </script>
@@ -53,25 +61,29 @@
         <label for="quality">{{ i18n.t('settings.graphics.quality') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="quality" min="1" max="10" step="1" :value="settings.quality" @change="onChange('updateSettings', $event)">
-        <label for="quality">{{ (settings.quality * 10) }}%</label>
+        <input type="range" id="quality" data-setting="graphics.quality" min="1" max="10" step="1" :value="settings.graphics.quality" @change="onChange('updateSettings', $event)">
+        <label for="quality">{{ (settings.graphics.quality * 10) }}%</label>
       </div>
       <div class="option">
         <label for="scale">{{ i18n.t('settings.graphics.scale') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="scale" min="0.5" max="1.5" step="0.125" :value="settings.scale" @change="onChange('updateSettings', $event)">
-        <label for="scale">{{ (settings.scale * 100) }}%</label>
+        <input type="range" id="scale" data-setting="graphics.scale" min="0.5" max="1.5" step="0.125" :value="settings.graphics.scale" @change="onChange('updateSettings', $event)">
+        <label for="scale">{{ (settings.graphics.scale * 100) }}%</label>
       </div>
     </div>
 
     <div class="group">
       <div class="option">
-        <label for="motion">{{ i18n.t('settings.graphics.camera') }}</label>
+        <label for="cameraRotation">{{ i18n.t('settings.graphics.camera') }}</label>
       </div>
       <div class="option">
-        <input type="checkbox" id="motion" :checked="settings.motion == true" @change="onChange('updateSettings', $event)">
-        <label for="motion">{{ i18n.t('settings.graphics.auto_rotate') }}</label>
+        <input type="checkbox" id="cameraRotation" data-setting="graphics.cameraRotation" :checked="settings.graphics.cameraRotation == true" @change="onChange('updateSettings', $event)">
+        <label for="cameraRotation">{{ i18n.t('settings.graphics.auto_rotate') }}</label>
+      </div>
+      <div class="option">
+        <input type="checkbox" id="backgroundMotion" data-setting="graphics.backgroundMotion" :checked="settings.graphics.backgroundMotion == true" @change="onChange('updateSettings', $event)">
+        <label for="backgroundMotion">{{ i18n.t('settings.graphics.background_motion') }}</label>
       </div>
       <div class="option">
         <label for="zoom">
@@ -81,8 +93,8 @@
         </label>
       </div>
       <div class="option">
-        <input type="range" id="zoom" min="80" max="280" step="20" :value="settings.zoom" :disabled="zoomDisabled" @input="onChange('updateSettings', $event)">
-        <label for="zoom">{{ (settings.zoom) }}</label>
+        <input type="range" id="zoom" data-setting="invalidatingSettings.zoom" min="80" max="280" step="20" :value="settings.invalidatingSettings.zoom" :disabled="zoomDisabled" @input="onChange('updateSettings', $event)">
+        <label for="zoom">{{ (settings.invalidatingSettings.zoom) }}</label>
       </div>
     </div>
     <div class="group">
@@ -90,11 +102,11 @@
         <label>{{ i18n.t('settings.graphics.developer_tools') }}</label>
       </div>
       <div class="option">
-        <input type="checkbox" id="stats" :checked="settings.stats == true" @change="onChange('updateSettings', $event)">
+        <input type="checkbox" id="stats" data-setting="graphics.stats" :checked="settings.graphics.stats == true" @change="onChange('updateSettings', $event)">
         <label for="stats">{{ i18n.t('settings.graphics.show_fps') }}</label>
       </div>
       <div class="option">
-        <input type="checkbox" id="debug" :checked="settings.debug == true" @change="onChange('updateSettings', $event, null, showHelpers)">
+        <input type="checkbox" id="debug" data-setting="invalidatingSettings.hitboxes" :checked="settings.invalidatingSettings.hitboxes == true" @change="onChange('updateSettings', $event, null, showHelpers)">
         <label for="debug">
           <span v-if="!isDebugValid" class="material-symbols-rounded" :data-title="i18n.t('settings.graphics.debug_badge')">verified_off</span>
           <span>{{ i18n.t('settings.graphics.debug_mode') }}</span>

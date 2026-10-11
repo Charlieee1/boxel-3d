@@ -154,6 +154,7 @@
       "disable_textboxes": "Disable Textboxes",
       "old_backgrounds": "Old Backgrounds",
       "save_invalid_runs": "Save Invalid Runs",
+      "jump_indicator_badge": "Verified badge requires jump indicator disabled",
       "show_jump_indicator": "Show Jump Indicator",
       "snap": "Editor Snap",
       "title": "General",
@@ -161,6 +162,7 @@
     },
     "graphics": {
       "auto_rotate": "Auto Rotate",
+      "background_motion": "Background Motion",
       "camera": "Camera",
       "debug_mode": "Debug Mode",
       "debug_badge": "Verified badge requires debug disabled",

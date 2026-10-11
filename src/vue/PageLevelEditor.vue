@@ -353,7 +353,7 @@
 
   function checkAutosave() {
     if (app.play == true) return; // Matches Ctrl+S, which is paused-only.
-    var minutes = app.storage.getSettings().autosave;
+    var minutes = app.storage.getSettings().levelEditor.autosave;
     if (!minutes || minutes <= 0) return;
     if (Date.now() - lastAutosaveTime >= minutes * 60000) {
       lastAutosaveTime = Date.now();
@@ -444,7 +444,7 @@
     // Deterministic mode only: App.playLevel()/Level.retryLevel() reset gravity to default too - a gravity
     // block's trigger otherwise carries over across pause/play. Non-deterministic mode never reset gravity
     // here before, so this stays opt-in to avoid changing existing (non-deterministic) editor behavior.
-    if (app.storage.getSettings().deterministic === true) {
+    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
       app.player.resetDeterministicPhysics();
       app.updateGravity();
     }

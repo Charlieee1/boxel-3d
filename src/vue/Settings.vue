@@ -16,7 +16,7 @@
   var tab = ref('general');
   var inputs = ref([]);
   var isOpen = ref(false);
-  var settings = ref({});
+  var settings = ref(app.storage.getSettings()); // Panels render before opening, so nested keys must exist
   var pendingScrollTarget = null;
 
   function parseOpenSettingsDetail(detail) {
@@ -40,6 +40,7 @@
     window.addEventListener('openSettings', openSettings);
 	  window.addEventListener('closeSettings', closeSettings);
     window.addEventListener('keydown', keydown);
+    window.addEventListener('settingsImported', reloadSettings);
   }
   
   // Remove event listeners
@@ -47,6 +48,12 @@
     window.removeEventListener('openSettings', openSettings);
 	  window.removeEventListener('closeSettings', closeSettings);
     window.removeEventListener('keydown', keydown);
+    window.removeEventListener('settingsImported', reloadSettings);
+  }
+
+  function reloadSettings() {
+    settings.value = app.storage.getSettings();
+    i18n.locale.value = settings.value.language; // Switch UI language to the imported one
   }
 
   function openSettings(e) {
@@ -103,7 +110,8 @@
 
   function updateSettings(e, choices, callback = function(){}) {
     var el = e.target;
-    var key = el.id;
+    var path = (el.dataset?.setting || el.id).split('.'); // data-setting holds the nested path, ex: graphics.quality
+    var key = path.pop();
     var value = el.value;
     var type = e.target.type;
 
@@ -114,8 +122,13 @@
     if (type == 'checkbox') value = el.checked;
     if (choices) value = choices[value];
 
+    // Reload if settings were saved elsewhere since opening, so only this change is applied
+    var storageSettings = app.storage.getSettings();
+    if (storageSettings.lastSaved != settings.value.lastSaved) settings.value = storageSettings;
+
     // Store settings
-    settings.value[key] = value;
+    var group = path.reduce(function(object, name) { return object[name]; }, settings.value);
+    group[key] = value;
     app.updateSettings(settings.value);
     callback();
   }

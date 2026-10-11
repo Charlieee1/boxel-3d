@@ -43,7 +43,7 @@ class Collision {
               var pairKey = objectA.uuid + '|' + objectB.uuid;
               var isNewPair = !this.activeSensorPairs.has(pairKey);
               this.activeSensorPairs.add(pairKey);
-              var shouldTrigger = isNewPair || settings.deterministic !== true;
+              var shouldTrigger = isNewPair || settings.invalidatingSettings.deterministic !== true;
 
               if (shouldTrigger) {
               if (objectA.body.class == 'cube' && objectA.isDeathBlock === true) {
@@ -51,7 +51,7 @@ class Collision {
               }
               else if (objectA.body.class == 'tip') {
                 if (objectB.body.class == 'player') {
-                  if (settings.disableTextboxes !== true) app.level.showTip(objectA.text);
+                  if (settings.general.disableTextboxes !== true) app.level.showTip(objectA.text);
                   objectA.hide(true);
                 }
               }

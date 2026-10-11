@@ -115,7 +115,7 @@
 
   function getProgressFromSettings(settings) {
     // Limit progress to max level count
-    let p = Number(settings.progress || 1);
+    let p = Number(settings.selectedLevel || 1);
     while (levels.value[p - 1] == undefined && p > 1) p--;
     return p;
   }
@@ -155,7 +155,7 @@
     // Update progress
     const progress = levels.value.findIndex(level => level.title == selectedLevel.value.title) + 1;
     const settings = app.storage.getSettings();
-    settings.progress = progress;
+    settings.selectedLevel = progress;
     app.updateSettings(settings);
   }
 

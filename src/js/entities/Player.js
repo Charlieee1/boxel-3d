@@ -149,7 +149,7 @@ class Player extends Cube {
       // render-interpolated value (see Cube.update's alpha blend) that can offset the rope's anchor
       // by a wall-clock-timing-dependent amount; non-deterministic mode keeps the original
       // (interpolated) source so existing runs/records made against that behavior stay comparable.
-      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().deterministic === true : false;
+      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
       var originX = isDeterministic ? this.body.position.x : this.position.x;
       var originY = isDeterministic ? -this.body.position.y : this.position.y;
 
@@ -222,7 +222,7 @@ class Player extends Cube {
       this.visible = false;
       this.killTimeout = setTimeout(function() { this.restart(true); }.bind(this), 1000); // Respawn in 1 second (bypasses manual respawn gate, this is automatic)
       var settings = app.storage.getSettings();
-      var particleColor = settings.deathParticleColor || this.color; // Fallback to player color
+      var particleColor = settings.general.deathParticleColour || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
 
@@ -231,7 +231,7 @@ class Player extends Cube {
       // physics bodies spawn by a wall-clock-timing-dependent amount; non-deterministic mode keeps
       // the original (interpolated) source so existing runs/records made against that behavior stay
       // comparable.
-      var isDeterministic = settings.deterministic === true;
+      var isDeterministic = settings.invalidatingSettings.deterministic === true;
       var originX = isDeterministic ? this.body.position.x : this.position.x;
       var originY = isDeterministic ? -this.body.position.y : this.position.y;
 

@@ -1,6 +1,7 @@
 # Bugs
 - When finishing a level with a custom zoom value, zoom value (and lock) carries over
 - Localstorage only some parts deleted occasionally
+  - input buffer and level packs
 - Pressing reset level in level editor doesn't reset cam pos
   - Keybind sometimes doesn't reset cam pos (resets to 0,0 sometimes)
   - Camera sometimes messed up when playtesting level after failing to reset cam pos in editor mode
@@ -39,8 +40,17 @@
 - Settings button doesn't pause gameplay in level editor
 - Jump restored when respawning
 - Mimic old UI properly
+  - Mimic bubble theme properly
+- Respawning temporarily sets camera to 0,0
+- Reset block doesn't stop camera rotation
+- Settings and pause menus don't pause auto respawn
+- esc on settings menu should exit settings menu
+- Jump is carried through automatic respawn
+- Move bounce snake to hard level pack
+- Player visual position not updated when short on ram/when lag
 
 # Level editor improvements
+- Organize level properties
 - Saved object groups
 - Allow combinations of modes and easy switching
 - Plugins
@@ -59,6 +69,8 @@
 - Anti lag (does extra physics simulation calls between rendering calls to catch up)
 - Change max zoom on slider to 1k (for level properties too)
 - Separate moving background from rotating camera
+- Make jump indicator disable verification badge
+- Separate moving background and rotating camera
 
 # QOL
 - Lines from teleport blocks to destinations
@@ -66,6 +78,8 @@
   - For level editor, setting
 - Show only levels not completed by player in level select menu
 - Change max zoom in editor to 5k
+- Pre-load next level
+- Make long level credits scroll
 
 # Extra features
 - Gravity preservation glitch working for campaign levels

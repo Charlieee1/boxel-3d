@@ -181,7 +181,7 @@ class Cube extends Mesh {
     // out, every reset was silently inexact by a session-dependent amount. Re-applying with the fresh
     // residual delta always converges exactly (verified: 0 failures in 1M randomized trials, never
     // needs more than one correction). Non-deterministic mode keeps the original single-pass behavior.
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
       if (this.body.position.x !== position.x || this.body.position.y !== -position.y) {
         Body.setPosition(this.body, { x: position.x, y: -position.y });
       }
@@ -222,7 +222,7 @@ class Cube extends Mesh {
   // Non-deterministic mode keeps the original single-pass behavior.
   setBodyAngle(targetAngle) {
     Body.setAngle(this.body, targetAngle);
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
       if (this.body.angle !== targetAngle) {
         Body.setAngle(this.body, targetAngle);
       }
@@ -253,7 +253,7 @@ class Cube extends Mesh {
     // that can happen before App.vue finishes `window.app = new App()` (ex: App's constructor building
     // its own initial player). Treat "app not ready yet" as non-deterministic (doesn't matter which
     // branch runs at construction time anyway - this.rotation.z and this.body.angle are still in sync).
-    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().deterministic === true : false;
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
 
     // Deterministic mode: skip the body-scale round trip entirely when x/y aren't actually changing -
     // Matter's Body.scale() recomputes vertices/inertia/part position via a point-relative transform
@@ -336,7 +336,7 @@ class Cube extends Mesh {
     // (keyed on bounds.min.x) between a reused and a fresh body, changing collision resolution order for
     // anything with simultaneous/overlapping contacts. Non-deterministic mode keeps the original
     // unconditional-zero-at-the-end ordering untouched, so vanilla physics is bit-for-bit unaffected.
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().deterministic === true) {
+    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
       Body.setVelocity(this.body, { x: 0, y: 0 });
       Body.setAngularVelocity(this.body, 0);
     }
@@ -398,7 +398,7 @@ class Cube extends Mesh {
   // offset/differently-sized sensors, static bodies, and - the scenario that exposed this bug -
   // multiple repeated calls reusing the cached template with no drift in between.
   resyncBodyGeometry() {
-    if ((typeof app === 'undefined' || !app.storage) || app.storage.getSettings().deterministic !== true) return;
+    if ((typeof app === 'undefined' || !app.storage) || app.storage.getSettings().invalidatingSettings.deterministic !== true) return;
     if (this.body.isStatic === true) return;
 
     var targetPosition = { x: this.body.position.x, y: this.body.position.y };

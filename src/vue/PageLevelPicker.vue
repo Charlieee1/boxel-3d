@@ -16,7 +16,7 @@
   var selectedItem = ref();
   var scores = app.storage.getScores();
   var settings = app.storage.getSettings();
-  var progress = parseInt(settings.progress);
+  var progress = parseInt(settings.selectedLevel);
   var preventAutoPlay = false;
   var emit = defineEmits(['setPage']);
 
@@ -58,7 +58,7 @@
     else if (selectedItem.value == e.detail) playSelectedItem();
     selectedItem.value = e.detail;
     settings = app.storage.getSettings();
-    settings.progress = app.level.getLevelIndex(selectedItem.value.title) + 1;
+    settings.selectedLevel = app.level.getLevelIndex(selectedItem.value.title) + 1;
     app.updateSettings(settings);
     updateDescription();
   }

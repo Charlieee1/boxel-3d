@@ -134,8 +134,11 @@ class App {
 
     // Load assets, then load game
     this.assets.load(function() {
-      this.load(callback);
-      this.updateSettings(null); // Update settings
+      // Level lists read thumbnails synchronously, so wait for them to load
+      this.storage.thumbnailsReady.then(function() {
+        this.load(callback);
+        this.updateSettings(null); // Update settings
+      }.bind(this));
     }.bind(this));
   }
 
@@ -143,7 +146,7 @@ class App {
     var storageSettings = this.storage.getSettings();
 
     // Start music
-    this.assets.audio.play(storageSettings.music, { queue: true });
+    this.assets.audio.play(storageSettings.audio.music, { queue: true });
 
     // Initialize background with model
     this.background.setTarget(this.player);
@@ -277,7 +280,7 @@ class App {
       // Update game objects
       this.player.updateMatrixWorld();
       this.player.renderRope(alpha);
-      this.background.update(delta, alpha, app.motion == false);
+      this.background.update(delta, alpha, app.backgroundMotion == false);
       this.background.updateMatrixWorld();
       this.animation.update(delta, alpha);
       this.graphics.update(delta);
@@ -346,7 +349,7 @@ class App {
     // via campaign's own pause menu (state stays 'campaign' while paused). Editing in the level
     // editor (paused, not playtesting) and anywhere outside a level (menus, level-manager) hide it.
     var inLevel = this.play === true || this.state === 'campaign';
-    if (settings.showJumpIndicator !== true || inLevel === false) {
+    if (settings.invalidatingSettings.jumpIndicator !== true || inLevel === false) {
       this.jumpIndicator.classList.remove('active');
       return;
     }
@@ -374,92 +377,91 @@ class App {
     if (settings == null) settings = storageSettings;
 
     // Add missing keys from storage
-    Object.keys(storageSettings).forEach(function (key) {
-      if (settings[key] == null) {
-        settings[key] = storageSettings[key];
-      }
-    });
+    this.storage.fillMissingSettings(settings, storageSettings);
 
     // Each of the 3 preset dropdowns independently re-applies only its own group's defaults
-    if (settings.themePreset != storageSettings.themePreset) {
-      Object.assign(settings, this.getMainThemeDefaults(settings.themePreset));
+    if (settings.theme.preset != storageSettings.theme.preset) {
+      Object.assign(settings.theme, this.getMainThemeDefaults(settings.theme.preset));
     }
-    if (settings.themeEditorPreset != storageSettings.themeEditorPreset) {
-      Object.assign(settings, this.getEditorThemeDefaults(settings.themeEditorPreset));
+    if (settings.theme.editorPreset != storageSettings.theme.editorPreset) {
+      Object.assign(settings.theme, this.getEditorThemeDefaults(settings.theme.editorPreset));
     }
-    if (settings.themePopupPreset != storageSettings.themePopupPreset) {
-      Object.assign(settings, this.getPopupThemeDefaults(settings.themePopupPreset));
+    if (settings.theme.popupPreset != storageSettings.theme.popupPreset) {
+      Object.assign(settings.theme, this.getPopupThemeDefaults(settings.theme.popupPreset));
     }
 
+    // Store locally, outdated settings are rejected and not applied
+    if (this.storage.setSettings(settings) === false) return false;
+
     // Update application from settings
-    this.assets.audio.setMasterVolume(settings.volume, 'master');
-    this.assets.audio.setMasterVolume(settings.volumeEffects, 'effects');
-    this.assets.audio.setMasterVolume(settings.volumeMusic, 'music');
-    this.updateQuality(settings.quality);
-    this.mouse.setSnap(settings.snap);
-    this.player.setSkin(settings.skin);
-    this.player.setInputBuffer(settings.buffer);
-    this.storage.setSettings(settings); // Store locally
-    this.updateCameraMotion(settings.motion);
-    this.updateCameraZoom(settings.zoom);
+    this.assets.audio.setMasterVolume(settings.audio.volume, 'master');
+    this.assets.audio.setMasterVolume(settings.audio.volumeEffects, 'effects');
+    this.assets.audio.setMasterVolume(settings.audio.volumeMusic, 'music');
+    this.updateQuality(settings.graphics.quality);
+    this.mouse.setSnap(settings.levelEditor.snap);
+    this.player.setSkin(settings.general.skin);
+    this.player.setInputBuffer(settings.invalidatingSettings.inputBuffer);
+    this.updateCameraMotion(settings.graphics.cameraRotation, settings.graphics.backgroundMotion);
+    this.updateCameraZoom(settings.invalidatingSettings.zoom);
     this.applyThemeStyles(settings);
     window.dispatchEvent(new CustomEvent('updateStatsVisibility'));
-    window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.scale }));
+    window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.graphics.scale }));
+    return true;
   }
 
   // Main Theme preset: group 2 (general UI) only - group 3/4 are driven independently by their own dropdowns
   getMainThemeDefaults(preset) {
     // Group 2 defaults match Main.scss's actual pink/orange/yellow UI (verified fallbacks), not invented dark grey
     var bubble = {
-      themeBgColor1: '#1e1e1e', themeBgColor2: '#FF8A4C', themeBgColor3: '#FF674C',
-      themeCornerRadius: 8, themeIconSize: 1,
-      themeAccentColor: '#eb2b6d', themeOptionAccentColor: '#4ca9ff', themeOptionAccentColor2: '#FFC24C',
+      bgColor1: '#1e1e1e', bgColor2: '#FF8A4C', bgColor3: '#FF674C',
+      cornerRadius: 8, iconSize: 1,
+      accentColor: '#eb2b6d', optionAccentColor: '#4ca9ff', optionAccentColor2: '#FFC24C',
       // Blue instead of the theme's orange accent - stands out against the flashy Bubble UI
-      themeStatsIconColor: '#4CA9FF',
+      statsIconColor: '#4CA9FF',
       // Home-button svg recolouring - Bubble defaults match each svg's original art exactly (no visible change)
-      themeSkinsBgColor: '#FF8A4C',
-      themeEditorButtonBgColor: '#4CA9FF', themeEditorButtonCraneColor: '#FFC24C', themeEditorButtonBlocksColor: '#4C7DFF',
-      themeMultiplayerBgColor: '#A8E148',
-      themePlayButtonBgColor: '#FF4C8A', themePlayButtonPlatformColor: '#FFD687',
-      themeMenuBgColor1: '#7908EB', themeMenuBgColor2: '#9B08EB', themeMenuBgColor3: '#B122FF', themeMenuBgColor4: '#C04CFF'
+      skinsBgColor: '#FF8A4C',
+      editorButtonBgColor: '#4CA9FF', editorButtonCraneColor: '#FFC24C', editorButtonBlocksColor: '#4C7DFF',
+      multiplayerBgColor: '#A8E148',
+      playButtonBgColor: '#FF4C8A', playButtonPlatformColor: '#FFD687',
+      menuBgColor1: '#7908EB', menuBgColor2: '#9B08EB', menuBgColor3: '#B122FF', menuBgColor4: '#C04CFF'
     };
 
     // Classic/Legacy match this repo's actual old (Origin.scss) UI colours, not invented ones
     var classic = Object.assign({}, bubble, {
-      themeBgColor1: '#252526',
+      bgColor1: '#252526',
       // Background 2/3 reuse Bubble's blue accent and a darker blue, instead of invented greys
-      themeBgColor2: '#4ca9ff', themeBgColor3: '#1d4264', themeCornerRadius: 4,
+      bgColor2: '#4ca9ff', bgColor3: '#1d4264', cornerRadius: 4,
       // Darker red accent; option-accent is a darker version of Bubble's blue, option-accent-2 is the dark purple
-      themeAccentColor: '#8f193a', themeOptionAccentColor: '#316ea6', themeOptionAccentColor2: '#ffffff',
+      accentColor: '#8f193a', optionAccentColor: '#316ea6', optionAccentColor2: '#ffffff',
       // Skins/pause-menu background primary colour
-      themeSkinsBgColor: '#FF80C0',
+      skinsBgColor: '#FF80C0',
       // Level editor button: lighter purple crane, darker background (same hue/saturation, lower lightness - not desaturated)
-      themeEditorButtonCraneColor: '#C25CFF', themeEditorButtonBgColor: '#004A8F',
+      editorButtonCraneColor: '#C25CFF', editorButtonBgColor: '#004A8F',
       // Multiplayer button background swaps green for the repo's existing "classic" pack purple
-      themeMultiplayerBgColor: '#990799',
+      multiplayerBgColor: '#990799',
       // Play button: platforms lightened (same hue/saturation as the classic block colour, higher lightness);
       // background matches the multiplayer button's own darkest derived shade
-      themePlayButtonPlatformColor: '#C408C0', themePlayButtonBgColor: '#1B0017',
+      playButtonPlatformColor: '#C408C0', playButtonBgColor: '#1B0017',
       // Menu background (background-purple.svg): ordered lightest (front) to darkest (back). Mid uses an
       // interpolated tone (not one of the 3 given colours) since two of them were too close in lightness to
       // tell apart - Front gets the lightest of the original 3, Far (nearest the darkest Back) gets the darkest
-      themeMenuBgColor1: '#270925', themeMenuBgColor2: '#630960', themeMenuBgColor3: '#840E6F', themeMenuBgColor4: '#A31577'
+      menuBgColor1: '#270925', menuBgColor2: '#630960', menuBgColor3: '#840E6F', menuBgColor4: '#A31577'
     });
-    var legacy = Object.assign({}, classic, { themeCornerRadius: 0 });
+    var legacy = Object.assign({}, classic, { cornerRadius: 0 });
 
     if (preset == 'funk') {
       // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected
       var rnd = () => this.getRandomVividColor();
       return Object.assign({}, bubble, {
-        themeBgColor1: rnd(), themeBgColor2: rnd(), themeBgColor3: rnd(),
-        themeCornerRadius: 8,
-        themeAccentColor: rnd(), themeOptionAccentColor: rnd(), themeOptionAccentColor2: rnd(),
-        themeStatsIconColor: rnd(),
-        themeSkinsBgColor: rnd(),
-        themeEditorButtonBgColor: rnd(), themeEditorButtonCraneColor: rnd(), themeEditorButtonBlocksColor: rnd(),
-        themeMultiplayerBgColor: rnd(),
-        themePlayButtonBgColor: rnd(), themePlayButtonPlatformColor: rnd(),
-        themeMenuBgColor1: rnd(), themeMenuBgColor2: rnd(), themeMenuBgColor3: rnd(), themeMenuBgColor4: rnd()
+        bgColor1: rnd(), bgColor2: rnd(), bgColor3: rnd(),
+        cornerRadius: 8,
+        accentColor: rnd(), optionAccentColor: rnd(), optionAccentColor2: rnd(),
+        statsIconColor: rnd(),
+        skinsBgColor: rnd(),
+        editorButtonBgColor: rnd(), editorButtonCraneColor: rnd(), editorButtonBlocksColor: rnd(),
+        multiplayerBgColor: rnd(),
+        playButtonBgColor: rnd(), playButtonPlatformColor: rnd(),
+        menuBgColor1: rnd(), menuBgColor2: rnd(), menuBgColor3: rnd(), menuBgColor4: rnd()
       });
     }
 
@@ -474,19 +476,19 @@ class App {
   // Level Editor Theme preset: group 3 only (dark/light)
   getEditorThemeDefaults(preset) {
     var dark = {
-      themeEditorToolbarColor1: '#1a1a1a', themeEditorToolbarColor2: '#0e0e0e', themeEditorToolbarOpacity: 0.5,
-      themeEditorIconSize: 1.5, themeEditorIconDeselectedColor: '#999999', themeEditorIconSelectedColor: '#ffffff',
-      themeEditorIconHighlightColor: null, themeEditorIconHighlightColorIsExplicit: false, themeEditorIconHighlightOpacity: 1,
-      themeEditorIconShadowColor: '#000000', themeEditorIconShadowOpacity: 0.15,
-      themeEditorTextboxBgColor: '#262626', themeEditorTextboxFontColor: '#ffffff'
+      editorToolbarColor1: '#1a1a1a', editorToolbarColor2: '#0e0e0e', editorToolbarOpacity: 0.5,
+      editorIconSize: 1.5, editorIconDeselectedColor: '#999999', editorIconSelectedColor: '#ffffff',
+      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false, editorIconHighlightOpacity: 1,
+      editorIconShadowColor: '#000000', editorIconShadowOpacity: 0.15,
+      editorTextboxBgColor: '#262626', editorTextboxFontColor: '#ffffff'
     };
 
     // Light: inverted backgrounds/text/icon colours, same sizing/opacity/shadow mechanics as dark
     var light = Object.assign({}, dark, {
-      themeEditorToolbarColor1: '#e5e5e5', themeEditorToolbarColor2: '#ffffff',
-      themeEditorIconDeselectedColor: '#666666', themeEditorIconSelectedColor: '#000000',
-      themeEditorIconHighlightColor: null, themeEditorIconHighlightColorIsExplicit: false,
-      themeEditorTextboxBgColor: '#ffffff', themeEditorTextboxFontColor: '#000000'
+      editorToolbarColor1: '#e5e5e5', editorToolbarColor2: '#ffffff',
+      editorIconDeselectedColor: '#666666', editorIconSelectedColor: '#000000',
+      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false,
+      editorTextboxBgColor: '#ffffff', editorTextboxFontColor: '#000000'
     });
 
     if (preset == 'funk') {
@@ -494,11 +496,11 @@ class App {
       // textbox background is the one exception, kept at 1/4 lightness so it still reads as a background
       var rnd = () => this.getRandomVividColor();
       return Object.assign({}, dark, {
-        themeEditorToolbarColor1: rnd(), themeEditorToolbarColor2: rnd(), themeEditorToolbarOpacity: 1,
-        themeEditorIconDeselectedColor: rnd(), themeEditorIconSelectedColor: rnd(),
-        themeEditorIconHighlightColor: rnd(), themeEditorIconHighlightColorIsExplicit: true, themeEditorIconHighlightOpacity: 1,
-        themeEditorIconShadowColor: rnd(), themeEditorIconShadowOpacity: 1,
-        themeEditorTextboxBgColor: this.getRandomVividColor(25), themeEditorTextboxFontColor: rnd()
+        editorToolbarColor1: rnd(), editorToolbarColor2: rnd(), editorToolbarOpacity: 1,
+        editorIconDeselectedColor: rnd(), editorIconSelectedColor: rnd(),
+        editorIconHighlightColor: rnd(), editorIconHighlightColorIsExplicit: true, editorIconHighlightOpacity: 1,
+        editorIconShadowColor: rnd(), editorIconShadowOpacity: 1,
+        editorTextboxBgColor: this.getRandomVividColor(25), editorTextboxFontColor: rnd()
       });
     }
 
@@ -507,11 +509,11 @@ class App {
 
   // Translucent Popup Theme preset: group 4 only (dark/light)
   getPopupThemeDefaults(preset) {
-    var dark = { themePopupOpacity: 0.5, themePopupBgColor: '#000000', themePopupTextColor: '#ffffff' };
-    var light = { themePopupOpacity: 0.5, themePopupBgColor: '#ffffff', themePopupTextColor: '#000000' };
+    var dark = { popupOpacity: 0.5, popupBgColor: '#000000', popupTextColor: '#ffffff' };
+    var light = { popupOpacity: 0.5, popupBgColor: '#ffffff', popupTextColor: '#000000' };
     // Funk: no opacity (fully solid), random max-brightness colours re-rolled each time it's selected
     if (preset == 'funk') {
-      return { themePopupOpacity: 1, themePopupBgColor: this.getRandomVividColor(), themePopupTextColor: this.getRandomVividColor() };
+      return { popupOpacity: 1, popupBgColor: this.getRandomVividColor(), popupTextColor: this.getRandomVividColor() };
     }
     return { dark: dark, light: light }[preset] || dark;
   }
@@ -519,38 +521,38 @@ class App {
   // Push current theme settings to CSS custom properties so Main.scss can consume them live
   applyThemeStyles(settings) {
     var root = document.documentElement.style;
-    var highlightColor = (settings.themeEditorIconHighlightColorIsExplicit && settings.themeEditorIconHighlightColor)
-      ? settings.themeEditorIconHighlightColor
-      : this.util.hexMidpoint('#000000', settings.themeAccentColor);
+    var highlightColor = (settings.theme.editorIconHighlightColorIsExplicit && settings.theme.editorIconHighlightColor)
+      ? settings.theme.editorIconHighlightColor
+      : this.util.hexMidpoint('#000000', settings.theme.accentColor);
 
     // Bubble's art was hand-tuned with larger corner rounding on some elements than the single
     // themeCornerRadius slider gives by default - Main.scss uses this attribute to special-case those
     // elements back to their correct fixed rounding only while the Bubble preset is selected
-    document.documentElement.setAttribute('data-theme-preset', settings.themePreset);
+    document.documentElement.setAttribute('data-theme-preset', settings.theme.preset);
 
-    root.setProperty('--theme-bg-color-1', settings.themeBgColor1);
-    root.setProperty('--theme-bg-color-2', settings.themeBgColor2);
-    root.setProperty('--theme-bg-color-3', settings.themeBgColor3);
-    root.setProperty('--theme-corner-radius', settings.themeCornerRadius + 'px');
-    root.setProperty('--theme-icon-size', settings.themeIconSize + 'em');
-    root.setProperty('--theme-accent-color', settings.themeAccentColor);
-    root.setProperty('--theme-option-accent-color', settings.themeOptionAccentColor);
-    root.setProperty('--theme-option-accent-color-2', settings.themeOptionAccentColor2);
-    root.setProperty('--theme-stats-icon-color', settings.themeStatsIconColor);
+    root.setProperty('--theme-bg-color-1', settings.theme.bgColor1);
+    root.setProperty('--theme-bg-color-2', settings.theme.bgColor2);
+    root.setProperty('--theme-bg-color-3', settings.theme.bgColor3);
+    root.setProperty('--theme-corner-radius', settings.theme.cornerRadius + 'px');
+    root.setProperty('--theme-icon-size', settings.theme.iconSize + 'em');
+    root.setProperty('--theme-accent-color', settings.theme.accentColor);
+    root.setProperty('--theme-option-accent-color', settings.theme.optionAccentColor);
+    root.setProperty('--theme-option-accent-color-2', settings.theme.optionAccentColor2);
+    root.setProperty('--theme-stats-icon-color', settings.theme.statsIconColor);
 
     // Home-button svg recolouring - each "shade"/gradient stop is derived from the one base setting per element,
     // via the exact hue/saturation/lightness offset the original hand-authored art used between its own tones
     // (an HSL shift, not an RGB mix toward black/white, which looked muddy/brown on warm hues)
-    root.setProperty('--theme-skins-bg-color', settings.themeSkinsBgColor);
-    root.setProperty('--theme-skins-bg-color-dark', this.util.shadeHex(settings.themeSkinsBgColor, -11.73, 0, 0));
-    root.setProperty('--theme-skins-bg-color-mid', this.util.shadeHex(settings.themeSkinsBgColor, -2.35, 0, 0));
-    root.setProperty('--theme-editor-button-bg-color', settings.themeEditorButtonBgColor);
-    root.setProperty('--theme-editor-button-crane-color', settings.themeEditorButtonCraneColor);
-    root.setProperty('--theme-editor-button-crane-color-light', this.util.shadeHex(settings.themeEditorButtonCraneColor, 0, 0, 11));
-    root.setProperty('--theme-editor-button-blocks-color', settings.themeEditorButtonBlocksColor);
-    root.setProperty('--theme-editor-button-blocks-color-light', this.util.shadeHex(settings.themeEditorButtonBlocksColor, -23, 0, 14));
-    root.setProperty('--theme-editor-button-blocks-color-lighter', this.util.shadeHex(settings.themeEditorButtonBlocksColor, -22, 0, 27));
-    var multiplayerBase = settings.themeMultiplayerBgColor;
+    root.setProperty('--theme-skins-bg-color', settings.theme.skinsBgColor);
+    root.setProperty('--theme-skins-bg-color-dark', this.util.shadeHex(settings.theme.skinsBgColor, -11.73, 0, 0));
+    root.setProperty('--theme-skins-bg-color-mid', this.util.shadeHex(settings.theme.skinsBgColor, -2.35, 0, 0));
+    root.setProperty('--theme-editor-button-bg-color', settings.theme.editorButtonBgColor);
+    root.setProperty('--theme-editor-button-crane-color', settings.theme.editorButtonCraneColor);
+    root.setProperty('--theme-editor-button-crane-color-light', this.util.shadeHex(settings.theme.editorButtonCraneColor, 0, 0, 11));
+    root.setProperty('--theme-editor-button-blocks-color', settings.theme.editorButtonBlocksColor);
+    root.setProperty('--theme-editor-button-blocks-color-light', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -23, 0, 14));
+    root.setProperty('--theme-editor-button-blocks-color-lighter', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -22, 0, 27));
+    var multiplayerBase = settings.theme.multiplayerBgColor;
     var multiplayerShade1 = this.util.shadeHex(multiplayerBase, 1, 5, -12);
     var multiplayerShade2 = this.util.shadeHex(multiplayerBase, 2, 28, -21);
     var multiplayerShade3 = this.util.shadeHex(multiplayerBase, 9, 28, -26);
@@ -559,37 +561,37 @@ class App {
     root.setProperty('--theme-multiplayer-bg-color-shade-2', multiplayerShade2);
     root.setProperty('--theme-multiplayer-bg-color-shade-3', multiplayerShade3);
     // Bubble keeps the original front-to-back layer order (lightest at back); Classic/Legacy flip it (darkest at back)
-    var multiplayerLayers = (settings.themePreset == 'bubble')
+    var multiplayerLayers = (settings.theme.preset == 'bubble')
       ? [multiplayerBase, multiplayerShade1, multiplayerShade2, multiplayerShade3]
       : [multiplayerShade3, multiplayerShade2, multiplayerShade1, multiplayerBase];
     root.setProperty('--theme-multiplayer-layer-1', multiplayerLayers[0]);
     root.setProperty('--theme-multiplayer-layer-2', multiplayerLayers[1]);
     root.setProperty('--theme-multiplayer-layer-3', multiplayerLayers[2]);
     root.setProperty('--theme-multiplayer-layer-4', multiplayerLayers[3]);
-    root.setProperty('--theme-play-button-bg-color', settings.themePlayButtonBgColor);
-    root.setProperty('--theme-play-button-bg-color-dark', this.util.shadeHex(settings.themePlayButtonBgColor, 0, -17, -10));
-    root.setProperty('--theme-play-button-platform-color', settings.themePlayButtonPlatformColor);
-    root.setProperty('--theme-play-button-platform-color-dark', this.util.shadeHex(settings.themePlayButtonPlatformColor, 0, 0, -11));
-    root.setProperty('--theme-menu-bg-color-1', settings.themeMenuBgColor1);
-    root.setProperty('--theme-menu-bg-color-2', settings.themeMenuBgColor2);
-    root.setProperty('--theme-menu-bg-color-3', settings.themeMenuBgColor3);
-    root.setProperty('--theme-menu-bg-color-4', settings.themeMenuBgColor4);
+    root.setProperty('--theme-play-button-bg-color', settings.theme.playButtonBgColor);
+    root.setProperty('--theme-play-button-bg-color-dark', this.util.shadeHex(settings.theme.playButtonBgColor, 0, -17, -10));
+    root.setProperty('--theme-play-button-platform-color', settings.theme.playButtonPlatformColor);
+    root.setProperty('--theme-play-button-platform-color-dark', this.util.shadeHex(settings.theme.playButtonPlatformColor, 0, 0, -11));
+    root.setProperty('--theme-menu-bg-color-1', settings.theme.menuBgColor1);
+    root.setProperty('--theme-menu-bg-color-2', settings.theme.menuBgColor2);
+    root.setProperty('--theme-menu-bg-color-3', settings.theme.menuBgColor3);
+    root.setProperty('--theme-menu-bg-color-4', settings.theme.menuBgColor4);
 
-    root.setProperty('--theme-editor-toolbar-color-1', settings.themeEditorToolbarColor1);
-    root.setProperty('--theme-editor-toolbar-color-2', settings.themeEditorToolbarColor2);
-    root.setProperty('--theme-editor-toolbar-bg', this.util.hexToRgba(settings.themeEditorToolbarColor1, settings.themeEditorToolbarOpacity));
-    root.setProperty('--theme-editor-toolbar-bg-2', this.util.hexToRgba(settings.themeEditorToolbarColor2, settings.themeEditorToolbarOpacity));
-    root.setProperty('--theme-editor-icon-size', settings.themeEditorIconSize + 'em');
-    root.setProperty('--theme-editor-icon-deselected-color', settings.themeEditorIconDeselectedColor);
-    root.setProperty('--theme-editor-icon-selected-color', settings.themeEditorIconSelectedColor);
-    root.setProperty('--theme-editor-icon-highlight-color', this.util.hexToRgba(highlightColor, settings.themeEditorIconHighlightOpacity));
-    root.setProperty('--theme-editor-icon-shadow-color', this.util.hexToRgba(settings.themeEditorIconShadowColor, settings.themeEditorIconShadowOpacity));
-    root.setProperty('--theme-editor-textbox-bg-color', settings.themeEditorTextboxBgColor);
-    root.setProperty('--theme-editor-textbox-font-color', settings.themeEditorTextboxFontColor);
+    root.setProperty('--theme-editor-toolbar-color-1', settings.theme.editorToolbarColor1);
+    root.setProperty('--theme-editor-toolbar-color-2', settings.theme.editorToolbarColor2);
+    root.setProperty('--theme-editor-toolbar-bg', this.util.hexToRgba(settings.theme.editorToolbarColor1, settings.theme.editorToolbarOpacity));
+    root.setProperty('--theme-editor-toolbar-bg-2', this.util.hexToRgba(settings.theme.editorToolbarColor2, settings.theme.editorToolbarOpacity));
+    root.setProperty('--theme-editor-icon-size', settings.theme.editorIconSize + 'em');
+    root.setProperty('--theme-editor-icon-deselected-color', settings.theme.editorIconDeselectedColor);
+    root.setProperty('--theme-editor-icon-selected-color', settings.theme.editorIconSelectedColor);
+    root.setProperty('--theme-editor-icon-highlight-color', this.util.hexToRgba(highlightColor, settings.theme.editorIconHighlightOpacity));
+    root.setProperty('--theme-editor-icon-shadow-color', this.util.hexToRgba(settings.theme.editorIconShadowColor, settings.theme.editorIconShadowOpacity));
+    root.setProperty('--theme-editor-textbox-bg-color', settings.theme.editorTextboxBgColor);
+    root.setProperty('--theme-editor-textbox-font-color', settings.theme.editorTextboxFontColor);
 
     // Translucent Popup group: every nested translucent "fancy popup" layer reuses this one bg colour, just stacked
-    root.setProperty('--theme-popup-bg', this.util.hexToRgba(settings.themePopupBgColor, settings.themePopupOpacity));
-    root.setProperty('--theme-popup-text-color', settings.themePopupTextColor);
+    root.setProperty('--theme-popup-bg', this.util.hexToRgba(settings.theme.popupBgColor, settings.theme.popupOpacity));
+    root.setProperty('--theme-popup-text-color', settings.theme.popupTextColor);
   }
 
   updateGravity(angle) { // between -1, and 1 directionally
@@ -600,7 +602,7 @@ class App {
     gravity.y = vector.y;
 
     // Animate camera
-    if (angle != null && app.motion == true) {
+    if (angle != null && app.cameraRotation == true) {
       angle *= -1;
       if (angle < 0) app.camera.rotation.z = (app.camera.rotation.z - (Math.PI * 2)) % (Math.PI * 2);
       scale = (Math.abs((angle + Math.PI) % (Math.PI)) / (Math.PI / 2)) + 1; // 0deg = 1, 90deg = 2
@@ -619,8 +621,9 @@ class App {
     //a.graphics.smaaPass.enabled = (quality == 10); // Enable if max graphics
   }
 
-  updateCameraMotion(motion) {
-    app.motion = motion;
+  updateCameraMotion(cameraRotation, backgroundMotion) {
+    app.cameraRotation = cameraRotation;
+    app.backgroundMotion = backgroundMotion;
   }
 
   saveOrbitState() {
@@ -708,7 +711,7 @@ class App {
     // Load level if json exists
     if (options.json) {
       app.player.cancelRestart(); // clear stale kill()-timer/physics-bias carryover from a prior level, same as retryLevel() does
-      if (app.storage.getSettings().deterministic === true) app.player.resetDeterministicPhysics();
+      if (app.storage.getSettings().invalidatingSettings.deterministic === true) app.player.resetDeterministicPhysics();
 
       var storageSettings = this.storage.getSettings();
       var title = options.json.name;
@@ -719,7 +722,7 @@ class App {
       if (theme == null) theme = this.level.getPackTheme(title);
       if (theme == null) theme = app.level.getTheme('classic');
       // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
-      if (storageSettings.themeOldBackgrounds == true && this.level.isFromCommunityPack(title) === false) theme = app.level.getTheme('classic');
+      if (storageSettings.theme.oldBackgrounds == true && this.level.isFromCommunityPack(title) === false) theme = app.level.getTheme('classic');
       app.level.entityFactory.color = theme.color;
       app.camera.position.z = zoom;
       app.camera.position.zDefault = zoom;
@@ -790,13 +793,13 @@ class App {
 
   isInputBufferValid() {
     var settings = app.storage.getSettings();
-    var inputBufferIsDisabled = settings.buffer === 0;
+    var inputBufferIsDisabled = settings.invalidatingSettings.inputBuffer === 0;
     return inputBufferIsDisabled;
   }
 
   isDebugValid() {
     var settings = app.storage.getSettings();
-    var debugIsDisabled = settings.debug === false;
+    var debugIsDisabled = settings.invalidatingSettings.hitboxes === false;
     return debugIsDisabled;
   }
 
@@ -808,11 +811,16 @@ class App {
 
   isDeterministicValid() {
     var settings = app.storage.getSettings();
-    return settings.deterministic !== true;
+    return settings.invalidatingSettings.deterministic !== true;
+  }
+
+  isJumpIndicatorValid() {
+    var settings = app.storage.getSettings();
+    return settings.invalidatingSettings.jumpIndicator !== true;
   }
 
   isVerified() {
-    return this.isInputBufferValid() && this.isDebugValid() && this.isZoomValid() && this.isDeterministicValid();
+    return this.isInputBufferValid() && this.isDebugValid() && this.isZoomValid() && this.isDeterministicValid() && this.isJumpIndicatorValid();
   }
 }
 

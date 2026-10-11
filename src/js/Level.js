@@ -262,7 +262,7 @@ class Level extends Group {
       var objectData = levelData.children[i];
       var object = this.entityFactory.createObject(objectData.class);
       if (objectData.class == 'player') object = app.player;
-      object.helper.visible = settings.debug;
+      object.helper.visible = settings.invalidatingSettings.hitboxes;
       this.setObjectProperties(object, objectData);
       this.addObject(object);
     }
@@ -313,7 +313,7 @@ class Level extends Group {
     // position/velocity via resetToOrigin(), but never touches positionImpulse/constraintImpulse or
     // Matter's pair cache (warm-started contact impulses), so without this, an "R" restart carries
     // that residual solver bias straight over from whatever happened before the restart.
-    if (app.storage.getSettings().deterministic === true) {
+    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
       app.player.resetDeterministicPhysics();
     }
 
@@ -339,9 +339,9 @@ class Level extends Group {
     // Check current state
     if (app.state == 'campaign') {
       var settings = app.storage.getSettings();
-      var progress = parseInt(settings.progress)
+      var progress = parseInt(settings.selectedLevel)
       progress++; // Increase level progress
-      settings.progress = progress;
+      settings.selectedLevel = progress;
       app.updateSettings(settings);
       window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
     }

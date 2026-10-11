@@ -47,7 +47,7 @@
     // Apply current settings scale on mount so remount preserves user choice
     try {
       var settings = app.storage.getSettings();
-      updateScale({ detail: settings.scale });
+      updateScale({ detail: settings.graphics.scale });
     }
     catch (err) {
       console.error(err);

@@ -927,10 +927,12 @@
     ]
   },
   {
-    "version": "2.9.3-m1.2.2",
+    "version": "2.9.3-m1.2.3",
     "revisions": [
       "Fixed deterministic mode",
-      "Fixed bug when level had no set theme"
+      "Fixed bug when level had no set theme",
+      "Fixed settings storage organization",
+      "Moved thumbnail storage to IndexedDB"
     ]
   }
 ]

@@ -1355,7 +1355,7 @@ class LevelEditor {
 
   renderGrid() {
     var settings = app.storage.getSettings();
-    var visible = settings.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
+    var visible = settings.levelEditor.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
     var canvas = this.ensureGridCanvas();
     canvas.style.display = visible ? 'block' : 'none';
     if (visible == false) return;
