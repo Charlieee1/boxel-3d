@@ -872,7 +872,7 @@
   {
     "version": "2.9.4",
     "revisions": [
-      "Fixed bugs"
+      "Fixed level editor cube deletion bug while rotating"
     ]
   }
 ]

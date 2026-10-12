@@ -139,7 +139,7 @@ class LevelEditor {
     app.mouse.setPosition('up', app.mouse.getPosition(e));
 
     // Allow quick erase
-    if (e.button == 2) app.mouse.mode = 'erase';
+    if (e.button == 2 && this.controlsOrbit.moved == false) app.mouse.mode = 'erase';
 
     // Check if drawing or erasing
     if (app.mouse.mode == 'draw') {
@@ -209,7 +209,7 @@ class LevelEditor {
         }
       }
     }
-    else if (app.mouse.mode == 'erase') {
+    else if (app.mouse.mode == 'erase' && !(e.button == 2 && this.controlsOrbit.moved)) {
       this.eraseTarget(e);
     }
 
