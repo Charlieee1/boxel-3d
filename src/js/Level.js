@@ -1,5 +1,5 @@
 import { Group } from 'three';
-import { World } from 'matter-js';
+import { Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
 
@@ -8,9 +8,12 @@ class Level extends Group {
     super();
     this.name = this.defaultName = 'My Level';
     this.theme = this.defaultTheme = 'classic';
+    this.defaultBlockColor = null;
     this.entityFactory = new EntityFactory();
     this.publishedFileId = null; // Reserved for Steam itemIds
     this.zoom = undefined;
+    this.disableManualCheckpointRespawn = false;
+    this.levelUIText = '';
   }
 
   addObject(object) {
@@ -26,6 +29,7 @@ class Level extends Group {
     // Add to group and compute world matrix once (scene.matrixWorldAutoUpdate is off)
     this.add(object);
     object.updateMatrixWorld();
+    object.helper.visible = app.storage.getSettings().invalidatingSettings.hitboxes === true; // New blocks follow debug mode
     object.updateHelper();
   }
 
@@ -45,12 +49,104 @@ class Level extends Group {
     var length = this.children.length;
     this.name = this.defaultName;
     this.theme = this.defaultTheme;
+    this.defaultBlockColor = null;
     this.zoom = undefined;
+    this.disableManualCheckpointRespawn = false;
+    this.levelUIText = '';
+    if (app.levelUIText) app.levelUIText.innerHTML = '';
     app.player.removeRope();
+    // Clear the session-only "Set as start position" playtest override - never persisted, cleared on exit/level-switch.
+    if (app.levelEditor) {
+      app.levelEditor.tempSpawnPosition = null;
+      app.levelEditor.tempSpawnRotation = null;
+    }
     for (var i=0; i < length; i++) {
       var child = this.children[0];
       this.removeObject(child, true);
     }
+  }
+
+  // Attempts to link exactly one pair of blocks whose nearest ends coincide (within 1e-6, float-rounding
+  // tolerance) - creates a Matter Constraint (added to app.engine.world) and returns { constraint, endIndexA,
+  // endIndexB }, or null if no ends coincide. endIndexA/endIndexB is the index (0 or 1) into that block's own
+  // getBlockEndCandidates().locals that was used for the link - i.e. which local end actually participated -
+  // or null if that block has no real end-centres (squarish/anchor block, linked via its plain centre instead).
+  // Purely transient: this is a one-time level-authoring aid (see LevelEditor.confirmChain), not a
+  // persistent feature - the caller is responsible for removing the constraint once the settle simulation
+  // it was created for is done, and for baking the settled result into the blocks' static positions.
+  linkBlockPair(a, b) {
+    // Matter's body is purely 2D (x/y/angle) - a tilted (x/y-rotated) block's local X/Y axes no longer match the
+    // physics plane, so neither its end-centre math nor a 2D constraint can represent it correctly (same restriction as cut-out).
+    if (a.rotation.x !== 0 || a.rotation.y !== 0 || b.rotation.x !== 0 || b.rotation.y !== 0) return null;
+
+    // Only z==0 blocks are ever added to engine.world (see addObject/updateObjectPhysicsState) - a constraint
+    // referencing a body that was never added to the world is never gravity/velocity-integrated by Engine.update,
+    // so it would silently do nothing (same reason Player.addRope checks this before adding a rope joint).
+    if (a.position.z !== 0 || b.position.z !== 0) return null;
+
+    var endsA = app.util.getBlockEndCandidates(a), endsB = app.util.getBlockEndCandidates(b);
+    var bestFa = -1, bestFb = -1, bestDist = 1e-6;
+    for (var fa = 0; fa < endsA.points.length; fa++) {
+      for (var fb = 0; fb < endsB.points.length; fb++) {
+        var d = endsA.points[fa].distanceTo(endsB.points[fb]);
+        if (d < bestDist) { bestDist = d; bestFa = fa; bestFb = fb; }
+      }
+    }
+    if (bestFa === -1) return null; // no coincident ends between this pair
+
+    // Matter rotates pointA/pointB by the body's angle DELTA since constraint creation, not its absolute angle
+    // (see Constraint.solve) - so the offset must be the current WORLD end-centre relative to the body, not the
+    // canonical unrotated local (which silently drops the block's own rotation at link time, if any, before settling).
+    var worldA = endsA.points[bestFa], worldB = endsB.points[bestFb];
+    var offsetA = { x: worldA.x - a.position.x, y: -(worldA.y - a.position.y) };
+    var offsetB = { x: worldB.x - b.position.x, y: -(worldB.y - b.position.y) };
+
+    // length is left unset so Matter derives it from the points' actual (near-zero) initial distance, same as
+    // Rope.js's joints - avoids hardcoding a literal 0 target length that doesn't quite match the true (within-1e-6) initial gap.
+    var constraint = Constraint.create({
+      bodyA: a.body, bodyB: b.body,
+      pointA: offsetA,
+      pointB: offsetB,
+      stiffness: 1
+    });
+    World.add(app.engine.world, constraint);
+    return {
+      constraint,
+      endIndexA: endsA.locals.length > 1 ? bestFa : null,
+      endIndexB: endsB.locals.length > 1 ? bestFb : null
+    };
+  }
+
+  // Builds Matter constraints for every coincident-end pair found WITHIN candidates (the confirmed "P" chain
+  // flow selection) - never scans the whole level. Returns { constraints, linkedEnds, linkPairs }: constraints is
+  // the array of created constraints, for the caller (LevelEditor.confirmChain) to remove from the world again
+  // once the one-time settle simulation they were created for finishes; linkedEnds is a Map from each
+  // candidate block to a Set of its own local end indices (0 and/or 1, see getBlockEndCandidates) that
+  // actually took part in a link - used by the baking step to know which of a block's ends (if any) need
+  // shortening to remove the end-centre overlap at each joint (see LevelEditor.finishChainSettle); linkPairs is
+  // the per-pair objA/objB/endIndexA/endIndexB detail behind linkedEnds, kept only for chain-bake debug logging.
+  buildChainLinksForCandidates(candidates) {
+    var constraints = [];
+    var linkedEnds = new Map();
+    var linkPairs = []; // per-pair objA/objB/endIndexA/endIndexB detail, kept only for chain-bake debug logging (see LevelEditor.logChainBakeDebugInfo)
+    var addLinkedEnd = (obj, index) => {
+      if (index == null) return;
+      if (!linkedEnds.has(obj)) linkedEnds.set(obj, new Set());
+      linkedEnds.get(obj).add(index);
+    };
+
+    for (var i = 0; i < candidates.length; i++) {
+      for (var j = i + 1; j < candidates.length; j++) {
+        var link = this.linkBlockPair(candidates[i], candidates[j]);
+        if (link) {
+          constraints.push(link.constraint);
+          addLinkedEnd(candidates[i], link.endIndexA);
+          addLinkedEnd(candidates[j], link.endIndexB);
+          linkPairs.push({ objA: candidates[i].uuid, objB: candidates[j].uuid, endIndexA: link.endIndexA, endIndexB: link.endIndexB });
+        }
+      }
+    }
+    return { constraints, linkedEnds, linkPairs };
   }
 
   removeParticles() {
@@ -126,8 +222,11 @@ class Level extends Group {
     var levelJSON = {};
     levelJSON.name = this.name;
     levelJSON.theme = this.theme;
+    levelJSON.defaultBlockColor = this.defaultBlockColor;
     levelJSON.description = this.description;
     levelJSON.zoom = this.zoom;
+    levelJSON.disableManualCheckpointRespawn = this.disableManualCheckpointRespawn;
+    levelJSON.levelUIText = this.levelUIText;
     levelJSON.version = app.version;
     levelJSON.children = [];
 
@@ -139,6 +238,7 @@ class Level extends Group {
         levelJSON.children.push(objectData);
       }
     }
+
     return levelJSON;
   }
 
@@ -149,59 +249,110 @@ class Level extends Group {
 
   importFromJSON(levelData) {
     this.name = levelData.name;
-    this.theme = levelData.theme;
+    this.theme = levelData.theme || this.defaultTheme;
+    this.defaultBlockColor = levelData.defaultBlockColor || null;
     this.description = levelData.description;
     this.zoom = levelData.zoom;
+    this.disableManualCheckpointRespawn = levelData.disableManualCheckpointRespawn || false;
+    this.levelUIText = levelData.levelUIText || '';
+    if (app.levelUIText) app.levelUIText.innerHTML = this.levelUIText; // Intentional: allows HTML tags
 
     // Loop through JSON level data
     for (var i = 0; i < levelData.children.length; i++) {
       var settings = app.storage.getSettings();
       var objectData = levelData.children[i];
       var object = this.entityFactory.createObject(objectData.class);
-      if (objectData.class == 'player') object = app.player;
-      object.helper.visible = settings.debug;
+      if (objectData.class == 'player') {
+        object = app.player;
+        if (settings.invalidatingSettings.deterministic === true) object.restoreConstructedBody();
+      }
+      object.helper.visible = settings.invalidatingSettings.hitboxes;
       this.setObjectProperties(object, objectData);
       this.addObject(object);
     }
   }
 
   resetLevel() {
+    // Reset counter read by tools/determinism-test to split recordings into attempts
+    window.__detAttempt = (window.__detAttempt == null) ? 0 : window.__detAttempt + 1;
+
     // Gets called every time the level starts (including checkpoints)
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
-      child.resetToOrigin();
-      child.updateMatrixWorld();
-      child.updateHelper();
+      // A throw from any one child (ex: a bad resyncBodyGeometry() case) must not abort the loop -
+      // every later child would silently stay un-reset (wrong position, stale velocity, etc), which is
+      // far worse and harder to diagnose than one object being skipped. Log which one failed so it's
+      // traceable from a single report instead of needing a repro round-trip.
+      try {
+        child.resetToOrigin();
+        child.updateMatrixWorld();
+        // Not every child has a helper (ex: Rope)
+        if (child.updateHelper) child.updateHelper();
+      } catch (e) {
+        console.error('resetLevel(): failed to reset child', child.getClass ? child.getClass() : child, e);
+      }
     }
+
+    // Every body is now at its final post-reset position - prune any activeSensorPairs entries that
+    // no longer correspond to genuine contact (see Collision.reconcileAfterReset for why this is
+    // needed: a deterministic-mode reset can teleport a body away from a sensor it was touching,
+    // without Matter ever getting the chance to fire a real collisionEnd for that pair).
+    app.collision.reconcileAfterReset();
+
+    // A jump made just before this reset still launches the player, so don't also hand out a fresh one
+    if (app.player.jumpPending !== true) app.player.jumpReady = true;
   }
 
-  retryLevel(keepCheckpoint = false) {
+  retryLevel(keepCheckpoint = false, respawnToTemp = true) {
     app.updateGravity();
     app.play = true;
     app.level.removeParticles();
     app.player.cancelRestart();
+
+    // Reset impulses and collision-pair cache if deterministic mode enabled - retryLevel() is the
+    // path the "R" key uses directly (PageCampaign.vue), bypassing Player.restart()/respawn() and
+    // their existing resetDeterministicPhysics() call entirely. resetScene() below zeroes each body's
+    // position/velocity via resetToOrigin(), but never touches positionImpulse/constraintImpulse or
+    // Matter's pair cache (warm-started contact impulses), so without this, an "R" restart carries
+    // that residual solver bias straight over from whatever happened before the restart.
+    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
+      app.player.resetDeterministicPhysics();
+    }
+
+    var jumpReady = app.player.jumpReady; // resetScene() refreshes the jump, which checkpoint respawns don't get
     app.resetScene();
     window.dispatchEvent(new CustomEvent('closePopup'));
-    
+
     // Remove checkpoint, or respawn to checkpoint
     if (keepCheckpoint == false || app.player.checkpoint == null) {
       app.timer.reset();
       app.timer.start();
       app.player.removeCheckpoint();
+      // resetScene() above reset the player to its real saved position - re-apply the level editor's
+      // temp spawn override (if any) so "R" mid-playtest respects it too (see LevelEditor.applyTempSpawn).
+      if (respawnToTemp && app.levelEditor) app.levelEditor.applyTempSpawn();
     }
-    else app.player.respawn(true);
+    else {
+      app.player.jumpReady = jumpReady;
+      app.player.respawn(true);
+    }
+
+    // resetScene() drew a frame at the level start - redraw at the real respawn point so it's never shown
+    app.updateRender({ delta: 0, alpha: 0 });
   }
 
   exitLevel() {
     app.timer.reset();
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     app.player.removeCheckpoint();
 
     // Check current state
     if (app.state == 'campaign') {
       var settings = app.storage.getSettings();
-      var progress = parseInt(settings.progress)
+      var progress = parseInt(settings.selectedLevel)
       progress++; // Increase level progress
-      settings.progress = progress;
+      settings.selectedLevel = progress;
+      app.level.clearLevel(); // Clear the level's zoom (and lock) before settings re-apply the camera zoom
       app.updateSettings(settings);
       window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
     }
@@ -225,6 +376,9 @@ class Level extends Group {
     object.setText(objectData.text);
     object.setFriction(objectData.friction);
     object.setColors(objectData.color || app.level.entityFactory.color);
+    object.setOpacity(objectData.opacity != null ? objectData.opacity : 1, true);
+    if (objectData.isDeathBlock != null && object.getClass() === 'cube') object.setDeathBlock(objectData.isDeathBlock, true);
+    if (objectData.resetConfig != null && object.getClass() === 'reset') object.setResetConfig(objectData.resetConfig, false);
   }
 
   showTip(text) {
@@ -250,6 +404,10 @@ class Level extends Group {
     this.traverse(function(obj) {
       if (obj.helper) obj.helper.visible = visible;
     });
+
+    // Hidden helpers aren't kept in place, so reposition them and redraw now (the loop doesn't render while paused)
+    this.updateHelpers();
+    app.graphics.render();
   }
 
   updateHelpers() {
@@ -295,6 +453,13 @@ class Level extends Group {
       })
     });
     return author;
+  }
+
+  isFromCommunityPack(title) {
+    // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
+    var communityPack = levels.packs.find(pack => pack.title === 'Level Packs');
+    if (communityPack == null) return false;
+    return communityPack.levels.some(level => level.title === title);
   }
 
   getLevelIndex(title) {

@@ -53,7 +53,7 @@ class App {
     this.scene.add(this.level);
     
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 2000);
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000);
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
@@ -85,8 +85,10 @@ class App {
   }
 
   async init(canvas, callback = function(){}) {
-    // Set version
-    fetch('./manifest.json')
+    // Set version - deliberately separate from manifest.json's own version field (which browser
+    // extension stores etc. require and manage independently) so the displayed/saved version never
+    // silently follows the wrong file (see versioning.md).
+    fetch('./json/version.json')
       .then(response => response.json())
       .then(data => this.version = data.version);
 
@@ -101,6 +103,16 @@ class App {
     this.scene.add(this.levelEditor.controlsTransform.getHelper());
     this.scene.add(this.levelEditor.controlsPutty.getHelper());
 
+    // Add overlay DOM elements (level UI text + jump indicator), reused across every page/theme
+    this.levelUIText = document.createElement('div');
+    this.levelUIText.id = 'level-ui-text';
+    this.levelUIText.className = 'level-ui-text-overlay';
+    document.body.appendChild(this.levelUIText);
+    this.jumpIndicator = document.createElement('div');
+    this.jumpIndicator.id = 'jump-indicator';
+    this.jumpIndicator.className = 'jump-indicator';
+    document.body.appendChild(this.jumpIndicator);
+
     // Add event listeners
     this.canvas = canvas;
     this.canvas.classList.add('hidden'); // Default hidden with CSS
@@ -112,11 +124,16 @@ class App {
     this.window.addEventListener('resize', function(e) { this.resizeWindow(e); }.bind(this));
     this.window.addEventListener('message', e => this.onMessage(e));
     Events.on(this.engine, 'collisionStart', function(e) { this.collision.checkPlayerCollision(e); }.bind(this));
-    
+    Events.on(this.engine, 'collisionEnd', function(e) { this.collision.checkCollisionEnd(e); }.bind(this));
+
+
     // Load assets, then load game
     this.assets.load(function() {
-      this.load(callback);
-      this.updateSettings(null); // Update settings
+      // Level lists read thumbnails synchronously, so wait for them to load
+      this.storage.thumbnailsReady.then(function() {
+        this.load(callback);
+        this.updateSettings(null); // Update settings
+      }.bind(this));
     }.bind(this));
   }
 
@@ -124,7 +141,7 @@ class App {
     var storageSettings = this.storage.getSettings();
 
     // Start music
-    this.assets.audio.play(storageSettings.music, { queue: true });
+    this.assets.audio.play(storageSettings.audio.music, { queue: true });
 
     // Initialize background with model
     this.background.setTarget(this.player);
@@ -147,6 +164,13 @@ class App {
   updateEngine({ delay }) {
     // Update engine to loop engine rate
     if (this.play == true) {
+      // Deterministic mode: jump buffer counts physics ticks instead of render-frame wall-clock time
+      var isDeterministic = this.storage.getSettings().invalidatingSettings.deterministic === true;
+      if (isDeterministic) this.player.updateJumpBuffer(delay);
+
+      // Deterministic mode: the level timer counts physics ticks (before the step, so a finishing tick is included)
+      if (isDeterministic) this.timer.tick(delay);
+
       // Update player object
       this.player.updateControls();
       this.player.updateForce();
@@ -155,6 +179,13 @@ class App {
 
       // Update world engine
       Engine.update(this.engine, delay);
+      this.player.jumpPending = false; // Any pending jump force was applied (and cleared) by this tick
+
+      // Deterministic mode: fall-out kills and death respawn run on physics ticks, not render frames/setTimeout
+      if (isDeterministic) {
+        this.updateOutOfBounds();
+        this.player.updateKillTimer();
+      }
 
       // Dispatch engine event
       this.eventEngineUpdated.detail.delay = delay;
@@ -173,7 +204,7 @@ class App {
       // Update game objects
       this.player.updateMatrixWorld();
       this.player.renderRope(alpha);
-      this.background.update(delta, alpha, app.motion == false);
+      this.background.update(delta, alpha, app.backgroundMotion == false);
       this.background.updateMatrixWorld();
       this.animation.update(delta, alpha);
       this.graphics.update(delta);
@@ -187,6 +218,15 @@ class App {
     // Update network animations (tweens)
     this.multiplayer.render(delta, alpha);
     this.multiplayer.players.updateMatrixWorld();
+
+    // Level UI text is only meant to be seen during actual gameplay, not while editing
+    if (this.levelUIText) this.levelUIText.style.display = this.play ? '' : 'none';
+
+    this.updateJumpIndicator();
+
+    // Re-check the visual grid's visibility every frame - LevelEditor.updateRender() (which normally
+    // drives this) is only called from editor-only interactions, so it never re-runs once Play starts.
+    if (this.levelEditor) this.levelEditor.renderGrid();
   }
 
   updateChildren(delta, alpha) {
@@ -204,17 +244,28 @@ class App {
     }
   }
 
+  // Deterministic-mode counterpart of Cube.update's out-of-bounds check, using the previous engine position
+  updateOutOfBounds() {
+    var index = this.level.children.length - 1;
+    while (index >= 0) {
+      var child = this.level.children[index];
+      if (child.body != null && child.isFrozen() == false && child.isStatic() == false) child.checkOutOfBounds(-child.body.positionPrev.y);
+      index--;
+    }
+  }
+
   updateNetwork({ delta, alpha }) {
     // Update network
     this.multiplayer.update(delta, alpha);
   }
 
   resizeWindow(e) {
-    var screenWidth = this.window.innerWidth;
-    var screenHeight = this.window.innerHeight;
-    this.camera.aspect = screenWidth / screenHeight;
+    this.screenWidth = this.window.innerWidth;
+    this.screenHeight = this.window.innerHeight;
+    this.camera.aspect = this.screenWidth / this.screenHeight;
     this.camera.updateProjectionMatrix();
-    this.graphics.setSize(screenWidth, screenHeight);
+    this.graphics.setSize(this.screenWidth, this.screenHeight);
+    this.updateJumpIndicator();
   }
 
   resetScene() {
@@ -224,6 +275,22 @@ class App {
     this.level.resetLevel();
     this.updateRender({ delta: 0, alpha: 0 }, 0);
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
+  }
+
+  updateJumpIndicator() {
+    var settings = this.storage.getSettings();
+    // Only shown during live gameplay (open menus also hide it via CSS, see #jump-indicator in Main.scss)
+    if (settings.invalidatingSettings.jumpIndicator !== true || this.play !== true) {
+      this.jumpIndicator.classList.remove('active');
+      return;
+    }
+
+    // Offset to the right of screen center by a fraction of screen height (~40px at 1080p), vertically aligned with the player
+    this.jumpIndicator.style.left = (this.screenWidth / 2 + this.screenHeight * 0.037) + 'px';
+    this.jumpIndicator.style.top = (this.screenHeight / 2) + 'px';
+
+    if (this.player.hasJump() && this.player.visible === true) this.jumpIndicator.classList.add('active');
+    else this.jumpIndicator.classList.remove('active');
   }
 
   updateCamera() {
@@ -239,27 +306,223 @@ class App {
     // Compare new settings with local storage
     var storageSettings = this.storage.getSettings();
     if (settings == null) settings = storageSettings;
-    
+
     // Add missing keys from storage
-    Object.keys(storageSettings).forEach(function (key) {
-      if (settings[key] == null) {
-        settings[key] = storageSettings[key];
-      }
-    });
-    
+    this.storage.fillMissingSettings(settings, storageSettings);
+
+    // Each of the 3 preset dropdowns independently re-applies only its own group's defaults
+    if (settings.theme.preset != storageSettings.theme.preset) {
+      Object.assign(settings.theme, this.getMainThemeDefaults(settings.theme.preset));
+    }
+    if (settings.theme.editorPreset != storageSettings.theme.editorPreset) {
+      Object.assign(settings.theme, this.getEditorThemeDefaults(settings.theme.editorPreset));
+    }
+    if (settings.theme.popupPreset != storageSettings.theme.popupPreset) {
+      Object.assign(settings.theme, this.getPopupThemeDefaults(settings.theme.popupPreset));
+    }
+
+    // Store locally, outdated settings are rejected and not applied
+    if (this.storage.setSettings(settings) === false) return false;
+
     // Update application from settings
-    this.assets.audio.setMasterVolume(settings.volume, 'master');
-    this.assets.audio.setMasterVolume(settings.volumeEffects, 'effects');
-    this.assets.audio.setMasterVolume(settings.volumeMusic, 'music');
-    this.updateQuality(settings.quality);
-    this.mouse.setSnap(settings.snap);
-    this.player.setSkin(settings.skin);
-    this.player.setInputBuffer(settings.buffer);
-    this.storage.setSettings(settings); // Store locally
-    this.updateCameraMotion(settings.motion);
-    this.updateCameraZoom(settings.zoom);
+    this.assets.audio.setMasterVolume(settings.audio.volume, 'master');
+    this.assets.audio.setMasterVolume(settings.audio.volumeEffects, 'effects');
+    this.assets.audio.setMasterVolume(settings.audio.volumeMusic, 'music');
+    this.updateQuality(settings.graphics.quality);
+    this.mouse.setSnap(settings.levelEditor.snap);
+    this.player.setSkin(settings.general.skin);
+    this.player.setInputBuffer(settings.invalidatingSettings.inputBuffer);
+    this.updateCameraMotion(settings.graphics.cameraRotation, settings.graphics.backgroundMotion);
+    this.updateCameraZoom(settings.invalidatingSettings.zoom);
+    this.applyThemeStyles(settings);
     window.dispatchEvent(new CustomEvent('updateStatsVisibility'));
-    window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.scale }));
+    window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.graphics.scale }));
+    return true;
+  }
+
+  // Main Theme preset: group 2 (general UI) only - group 3/4 are driven independently by their own dropdowns
+  getMainThemeDefaults(preset) {
+    // Group 2 defaults match Main.scss's actual pink/orange/yellow UI (verified fallbacks), not invented dark grey
+    var bubble = {
+      bgColor1: '#1e1e1e', bgColor2: '#FF8A4C', bgColor3: '#FF674C',
+      cornerRadius: 8, iconSize: 1,
+      accentColor: '#eb2b6d', optionAccentColor: '#4ca9ff', optionAccentColor2: '#FFC24C',
+      // Blue instead of the theme's orange accent - stands out against the flashy Bubble UI
+      statsIconColor: '#4CA9FF',
+      // Home-button svg recolouring - Bubble defaults match each svg's original art exactly (no visible change)
+      skinsBgColor: '#FF8A4C',
+      editorButtonBgColor: '#4CA9FF', editorButtonCraneColor: '#FFC24C', editorButtonBlocksColor: '#4C7DFF',
+      multiplayerBgColor: '#A8E148',
+      playButtonBgColor: '#FF4C8A', playButtonPlatformColor: '#FFD687',
+      menuBgColor1: '#7908EB', menuBgColor2: '#9B08EB', menuBgColor3: '#B122FF', menuBgColor4: '#C04CFF'
+    };
+
+    // Classic/Legacy match this repo's actual old (Origin.scss) UI colours, not invented ones
+    var classic = Object.assign({}, bubble, {
+      bgColor1: '#252526',
+      // Background 2/3 reuse Bubble's blue accent and a darker blue, instead of invented greys
+      bgColor2: '#4ca9ff', bgColor3: '#1d4264', cornerRadius: 4,
+      // Darker red accent; option-accent is a darker version of Bubble's blue, option-accent-2 is the dark purple
+      accentColor: '#8f193a', optionAccentColor: '#316ea6', optionAccentColor2: '#ffffff',
+      // Skins/pause-menu background primary colour
+      skinsBgColor: '#FF80C0',
+      // Level editor button: lighter purple crane, darker background (same hue/saturation, lower lightness - not desaturated)
+      editorButtonCraneColor: '#C25CFF', editorButtonBgColor: '#004A8F',
+      // Multiplayer button background swaps green for the repo's existing "classic" pack purple
+      multiplayerBgColor: '#990799',
+      // Play button: platforms lightened (same hue/saturation as the classic block colour, higher lightness);
+      // background matches the multiplayer button's own darkest derived shade
+      playButtonPlatformColor: '#C408C0', playButtonBgColor: '#1B0017',
+      // Menu background (background-purple.svg): ordered lightest (front) to darkest (back). Mid uses an
+      // interpolated tone (not one of the 3 given colours) since two of them were too close in lightness to
+      // tell apart - Front gets the lightest of the original 3, Far (nearest the darkest Back) gets the darkest
+      menuBgColor1: '#270925', menuBgColor2: '#630960', menuBgColor3: '#840E6F', menuBgColor4: '#A31577'
+    });
+    var legacy = Object.assign({}, classic, { cornerRadius: 0 });
+
+    if (preset == 'funk') {
+      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected
+      var rnd = () => this.getRandomVividColor();
+      return Object.assign({}, bubble, {
+        bgColor1: rnd(), bgColor2: rnd(), bgColor3: rnd(),
+        cornerRadius: 8,
+        accentColor: rnd(), optionAccentColor: rnd(), optionAccentColor2: rnd(),
+        statsIconColor: rnd(),
+        skinsBgColor: rnd(),
+        editorButtonBgColor: rnd(), editorButtonCraneColor: rnd(), editorButtonBlocksColor: rnd(),
+        multiplayerBgColor: rnd(),
+        playButtonBgColor: rnd(), playButtonPlatformColor: rnd(),
+        menuBgColor1: rnd(), menuBgColor2: rnd(), menuBgColor3: rnd(), menuBgColor4: rnd()
+      });
+    }
+
+    return { bubble: bubble, classic: classic, legacy: legacy }[preset] || bubble;
+  }
+
+  // Random fully-saturated, max-lightness hex colour (HSL S=100/L=50) - a random hue every call, for the Funk preset
+  getRandomVividColor(lightness = 50) {
+    return this.util.hslToHex(this.util.randomNumber(0, 360), 100, lightness);
+  }
+
+  // Level Editor Theme preset: group 3 only (dark/light)
+  getEditorThemeDefaults(preset) {
+    var dark = {
+      editorToolbarColor1: '#1a1a1a', editorToolbarColor2: '#0e0e0e', editorToolbarOpacity: 0.5,
+      editorIconSize: 1.5, editorIconDeselectedColor: '#999999', editorIconSelectedColor: '#ffffff',
+      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false, editorIconHighlightOpacity: 1,
+      editorIconShadowColor: '#000000', editorIconShadowOpacity: 0.15,
+      editorTextboxBgColor: '#262626', editorTextboxFontColor: '#ffffff'
+    };
+
+    // Light: inverted backgrounds/text/icon colours, same sizing/opacity/shadow mechanics as dark
+    var light = Object.assign({}, dark, {
+      editorToolbarColor1: '#e5e5e5', editorToolbarColor2: '#ffffff',
+      editorIconDeselectedColor: '#666666', editorIconSelectedColor: '#000000',
+      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false,
+      editorTextboxBgColor: '#ffffff', editorTextboxFontColor: '#000000'
+    });
+
+    if (preset == 'funk') {
+      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected -
+      // textbox background is the one exception, kept at 1/4 lightness so it still reads as a background
+      var rnd = () => this.getRandomVividColor();
+      return Object.assign({}, dark, {
+        editorToolbarColor1: rnd(), editorToolbarColor2: rnd(), editorToolbarOpacity: 1,
+        editorIconDeselectedColor: rnd(), editorIconSelectedColor: rnd(),
+        editorIconHighlightColor: rnd(), editorIconHighlightColorIsExplicit: true, editorIconHighlightOpacity: 1,
+        editorIconShadowColor: rnd(), editorIconShadowOpacity: 1,
+        editorTextboxBgColor: this.getRandomVividColor(25), editorTextboxFontColor: rnd()
+      });
+    }
+
+    return { dark: dark, light: light }[preset] || dark;
+  }
+
+  // Translucent Popup Theme preset: group 4 only (dark/light)
+  getPopupThemeDefaults(preset) {
+    var dark = { popupOpacity: 0.5, popupBgColor: '#000000', popupTextColor: '#ffffff' };
+    var light = { popupOpacity: 0.5, popupBgColor: '#ffffff', popupTextColor: '#000000' };
+    // Funk: no opacity (fully solid), random max-brightness colours re-rolled each time it's selected
+    if (preset == 'funk') {
+      return { popupOpacity: 1, popupBgColor: this.getRandomVividColor(), popupTextColor: this.getRandomVividColor() };
+    }
+    return { dark: dark, light: light }[preset] || dark;
+  }
+
+  // Push current theme settings to CSS custom properties so Main.scss can consume them live
+  applyThemeStyles(settings) {
+    var root = document.documentElement.style;
+    var highlightColor = (settings.theme.editorIconHighlightColorIsExplicit && settings.theme.editorIconHighlightColor)
+      ? settings.theme.editorIconHighlightColor
+      : this.util.hexMidpoint('#000000', settings.theme.accentColor);
+
+    // Bubble's art was hand-tuned with larger corner rounding on some elements than the single
+    // themeCornerRadius slider gives by default - Main.scss uses this attribute to special-case those
+    // elements back to their correct fixed rounding only while the Bubble preset is selected
+    document.documentElement.setAttribute('data-theme-preset', settings.theme.preset);
+
+    root.setProperty('--theme-bg-color-1', settings.theme.bgColor1);
+    root.setProperty('--theme-bg-color-2', settings.theme.bgColor2);
+    root.setProperty('--theme-bg-color-3', settings.theme.bgColor3);
+    root.setProperty('--theme-corner-radius', settings.theme.cornerRadius + 'px');
+    root.setProperty('--theme-icon-size', settings.theme.iconSize + 'em');
+    root.setProperty('--theme-accent-color', settings.theme.accentColor);
+    root.setProperty('--theme-option-accent-color', settings.theme.optionAccentColor);
+    root.setProperty('--theme-option-accent-color-2', settings.theme.optionAccentColor2);
+    root.setProperty('--theme-stats-icon-color', settings.theme.statsIconColor);
+
+    // Home-button svg recolouring - each "shade"/gradient stop is derived from the one base setting per element,
+    // via the exact hue/saturation/lightness offset the original hand-authored art used between its own tones
+    // (an HSL shift, not an RGB mix toward black/white, which looked muddy/brown on warm hues)
+    root.setProperty('--theme-skins-bg-color', settings.theme.skinsBgColor);
+    root.setProperty('--theme-skins-bg-color-dark', this.util.shadeHex(settings.theme.skinsBgColor, -11.73, 0, 0));
+    root.setProperty('--theme-skins-bg-color-mid', this.util.shadeHex(settings.theme.skinsBgColor, -2.35, 0, 0));
+    root.setProperty('--theme-editor-button-bg-color', settings.theme.editorButtonBgColor);
+    root.setProperty('--theme-editor-button-crane-color', settings.theme.editorButtonCraneColor);
+    root.setProperty('--theme-editor-button-crane-color-light', this.util.shadeHex(settings.theme.editorButtonCraneColor, 0, 0, 11));
+    root.setProperty('--theme-editor-button-blocks-color', settings.theme.editorButtonBlocksColor);
+    root.setProperty('--theme-editor-button-blocks-color-light', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -23, 0, 14));
+    root.setProperty('--theme-editor-button-blocks-color-lighter', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -22, 0, 27));
+    var multiplayerBase = settings.theme.multiplayerBgColor;
+    var multiplayerShade1 = this.util.shadeHex(multiplayerBase, 1, 5, -12);
+    var multiplayerShade2 = this.util.shadeHex(multiplayerBase, 2, 28, -21);
+    var multiplayerShade3 = this.util.shadeHex(multiplayerBase, 9, 28, -26);
+    root.setProperty('--theme-multiplayer-bg-color', multiplayerBase);
+    root.setProperty('--theme-multiplayer-bg-color-shade-1', multiplayerShade1);
+    root.setProperty('--theme-multiplayer-bg-color-shade-2', multiplayerShade2);
+    root.setProperty('--theme-multiplayer-bg-color-shade-3', multiplayerShade3);
+    // Bubble keeps the original front-to-back layer order (lightest at back); Classic/Legacy flip it (darkest at back)
+    var multiplayerLayers = (settings.theme.preset == 'bubble')
+      ? [multiplayerBase, multiplayerShade1, multiplayerShade2, multiplayerShade3]
+      : [multiplayerShade3, multiplayerShade2, multiplayerShade1, multiplayerBase];
+    root.setProperty('--theme-multiplayer-layer-1', multiplayerLayers[0]);
+    root.setProperty('--theme-multiplayer-layer-2', multiplayerLayers[1]);
+    root.setProperty('--theme-multiplayer-layer-3', multiplayerLayers[2]);
+    root.setProperty('--theme-multiplayer-layer-4', multiplayerLayers[3]);
+    root.setProperty('--theme-play-button-bg-color', settings.theme.playButtonBgColor);
+    root.setProperty('--theme-play-button-bg-color-dark', this.util.shadeHex(settings.theme.playButtonBgColor, 0, -17, -10));
+    root.setProperty('--theme-play-button-platform-color', settings.theme.playButtonPlatformColor);
+    root.setProperty('--theme-play-button-platform-color-dark', this.util.shadeHex(settings.theme.playButtonPlatformColor, 0, 0, -11));
+    root.setProperty('--theme-menu-bg-color-1', settings.theme.menuBgColor1);
+    root.setProperty('--theme-menu-bg-color-2', settings.theme.menuBgColor2);
+    root.setProperty('--theme-menu-bg-color-3', settings.theme.menuBgColor3);
+    root.setProperty('--theme-menu-bg-color-4', settings.theme.menuBgColor4);
+
+    root.setProperty('--theme-editor-toolbar-color-1', settings.theme.editorToolbarColor1);
+    root.setProperty('--theme-editor-toolbar-color-2', settings.theme.editorToolbarColor2);
+    root.setProperty('--theme-editor-toolbar-bg', this.util.hexToRgba(settings.theme.editorToolbarColor1, settings.theme.editorToolbarOpacity));
+    root.setProperty('--theme-editor-toolbar-bg-2', this.util.hexToRgba(settings.theme.editorToolbarColor2, settings.theme.editorToolbarOpacity));
+    root.setProperty('--theme-editor-icon-size', settings.theme.editorIconSize + 'em');
+    root.setProperty('--theme-editor-icon-deselected-color', settings.theme.editorIconDeselectedColor);
+    root.setProperty('--theme-editor-icon-selected-color', settings.theme.editorIconSelectedColor);
+    root.setProperty('--theme-editor-icon-highlight-color', this.util.hexToRgba(highlightColor, settings.theme.editorIconHighlightOpacity));
+    root.setProperty('--theme-editor-icon-shadow-color', this.util.hexToRgba(settings.theme.editorIconShadowColor, settings.theme.editorIconShadowOpacity));
+    root.setProperty('--theme-editor-textbox-bg-color', settings.theme.editorTextboxBgColor);
+    root.setProperty('--theme-editor-textbox-font-color', settings.theme.editorTextboxFontColor);
+
+    // Translucent Popup group: every nested translucent "fancy popup" layer reuses this one bg colour, just stacked
+    root.setProperty('--theme-popup-bg', this.util.hexToRgba(settings.theme.popupBgColor, settings.theme.popupOpacity));
+    root.setProperty('--theme-popup-text-color', settings.theme.popupTextColor);
   }
 
   updateGravity(angle) { // between -1, and 1 directionally
@@ -270,11 +533,11 @@ class App {
     gravity.y = vector.y;
 
     // Animate camera
-    if (angle != null && app.motion == true) {
+    if (angle != null && app.cameraRotation == true) {
       angle *= -1;
       if (angle < 0) app.camera.rotation.z = (app.camera.rotation.z - (Math.PI * 2)) % (Math.PI * 2);
       scale = (Math.abs((angle + Math.PI) % (Math.PI)) / (Math.PI / 2)) + 1; // 0deg = 1, 90deg = 2
-      app.animation.tween({ object: app.camera.rotation, to: { z: angle }, duration: 250 }).start();
+      app.cameraRotationTween = app.animation.tween({ object: app.camera.rotation, to: { z: angle }, duration: 250 }).start();
       app.background.animateScale(scale);
     }
     else {
@@ -283,19 +546,29 @@ class App {
     }
   }
 
+  // Stop any camera rotation animation and instantly unrotate the camera
+  resetCameraRotation() {
+    if (this.cameraRotationTween) this.cameraRotationTween.stop();
+    this.cameraRotationTween = null;
+    this.camera.rotation.z = 0;
+  }
+
   updateQuality(quality) {
     if (quality <= 0) quality = 1;
     this.graphics.setPixelRatio(this.window.devicePixelRatio / (10 / quality));
     //a.graphics.smaaPass.enabled = (quality == 10); // Enable if max graphics
   }
 
-  updateCameraMotion(motion) {
-    app.motion = motion;
+  updateCameraMotion(cameraRotation, backgroundMotion) {
+    app.cameraRotation = cameraRotation;
+    app.backgroundMotion = backgroundMotion;
   }
 
   saveOrbitState() {
     // Keep the game camera perpendicular while preserving z tilt from gravity.
     if (this.state == 'level-editor') {
+      // Save the camera straight in front of the player so resetting the orbit never skews its rotation
+      this.camera.position.set(this.player.position.x, this.player.position.y + this.camera.tilt, this.camera.position.zDefault);
       this.camera.rotation.x = 0;
       this.camera.rotation.y = 0;
       this.camera.updateMatrixWorld();
@@ -307,6 +580,14 @@ class App {
   updateCameraZoom(zoom) {
     // Skip camera update if level has a locked zoom
     if (this.level.zoom !== undefined) return;
+
+    // While editing, only move the camera if it's in its reset state, otherwise just update where it resets to
+    var isEditing = this.state == 'level-editor' && this.play == false;
+    if (isEditing && this.levelEditor.isCameraReset() == false) {
+      this.camera.position.zDefault = zoom;
+      this.levelEditor.controlsOrbit.position0.z = zoom;
+      return;
+    }
     this.camera.position.zDefault = zoom;
     this.camera.position.z = zoom;
     this.saveOrbitState();
@@ -317,6 +598,8 @@ class App {
     app.play = false;
     app.resetScene();
     app.level.clearLevel();
+    app.updateCameraZoom(app.storage.getSettings().invalidatingSettings.zoom); // Don't carry the level's zoom over
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
     window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
@@ -326,13 +609,12 @@ class App {
   startLevel() {
     app.play = true;
     app.timer.start();
+    app.player.resumeRestart(); // Continue a death respawn held by the editor's pause (fresh starts already cancelled it)
 
-    // Adjust camera zoom
-    if (app.level.zoom) {
-      app.camera.position.zDefault = app.level.zoom;
-      app.camera.position.z = app.level.zoom;
-      app.saveOrbitState();
-    }
+    // Adjust camera zoom and save a straight-on camera as the orbit reset state
+    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.z = app.camera.position.zDefault;
+    app.saveOrbitState();
 
     // Play jump sound
     this.assets.audio.play('jump');
@@ -377,14 +659,19 @@ class App {
 
     // Load level if json exists
     if (options.json) {
+      app.player.cancelRestart(); // clear stale kill()-timer/physics-bias carryover from a prior level, same as retryLevel() does
+      if (app.storage.getSettings().invalidatingSettings.deterministic === true) app.player.resetDeterministicPhysics();
+
       var storageSettings = this.storage.getSettings();
       var title = options.json.name;
       var description = this.level.getDescriptionByTitle(title)
       var author = this.level.getAuthorByTitle(title);
       var theme = this.level.getTheme(options.json.theme);
-      var zoom = options.json.zoom || app.camera.position.zDefault;
+      var zoom = options.json.zoom || storageSettings.invalidatingSettings.zoom;
       if (theme == null) theme = this.level.getPackTheme(title);
-      if (storageSettings.theme == 'origin' || theme == null) theme = app.level.getTheme('classic');
+      if (theme == null) theme = app.level.getTheme('classic');
+      // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
+      if (storageSettings.theme.oldBackgrounds == true && this.level.isFromCommunityPack(title) === false) theme = app.level.getTheme('classic');
       app.level.entityFactory.color = theme.color;
       app.camera.position.z = zoom;
       app.camera.position.zDefault = zoom;
@@ -406,6 +693,8 @@ class App {
       app.timer.reset();
       app.level.clearLevel();
       app.level.importFromJSON(options.json);
+      // Apply level's custom default color override, if set (loaded above by importFromJSON)
+      if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
       app.level.publishedFileId = options.publishedFileId; // Steam level ID
       app.saveOrbitState();
       app.background.visible = true;
@@ -435,11 +724,13 @@ class App {
   pauseLevel() {
     app.timer.pause();
     app.play = false;
+    app.player.pauseRestart(); // Menus hold the death respawn too
   }
 
   resumeLevel() {
     app.timer.resume();
     app.play = true;
+    app.player.resumeRestart();
     window.dispatchEvent(new CustomEvent('closePopup'));
   }
 
@@ -453,24 +744,36 @@ class App {
 
   isInputBufferValid() {
     var settings = app.storage.getSettings();
-    var inputBufferIsDisabled = settings.buffer === 0;
+    var inputBufferIsDisabled = settings.invalidatingSettings.inputBuffer === 0;
     return inputBufferIsDisabled;
   }
 
   isDebugValid() {
     var settings = app.storage.getSettings();
-    var debugIsDisabled = settings.debug === false;
+    var debugIsDisabled = settings.invalidatingSettings.hitboxes === false;
     return debugIsDisabled;
   }
 
   isZoomValid() {
     var zoom = app.camera.position.z;
+    // Editor camera zooms freely while editing, so check the zoom playtesting will use
+    if (app.state == 'level-editor' && app.play == false) zoom = app.level.zoom || app.camera.position.zDefault;
     var zoomIsValid = app.level.zoom ? (zoom == app.level.zoom) : (zoom == 180);
     return zoomIsValid;
   }
 
+  isDeterministicValid() {
+    var settings = app.storage.getSettings();
+    return settings.invalidatingSettings.deterministic !== true;
+  }
+
+  isJumpIndicatorValid() {
+    var settings = app.storage.getSettings();
+    return settings.invalidatingSettings.jumpIndicator !== true;
+  }
+
   isVerified() {
-    return this.isInputBufferValid() && this.isDebugValid() && this.isZoomValid();
+    return this.isInputBufferValid() && this.isDebugValid() && this.isZoomValid() && this.isDeterministicValid() && this.isJumpIndicatorValid();
   }
 }
 

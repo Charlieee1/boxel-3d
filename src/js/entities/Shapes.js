@@ -43,7 +43,7 @@ class Shapes extends Group {
     options.opacity = (options.opacity == null) ? 1 : options.opacity;
 
     var geometry = new ConeGeometry((options.scaleX / 2) * 1.5, options.scaleY, options.segments);
-    var material = new MeshPhongMaterial({ color: options.color, flatShading: true });
+    var material = new MeshPhongMaterial({ color: options.color, flatShading: true, transparent: true });
     var cone = new Mesh(geometry, material);
     cone.castShadow = true;
     cone.receiveShadow = true;
@@ -83,7 +83,7 @@ class Shapes extends Group {
       bevelThickness: 0 // Default = 0.2
     }
     var geometry = new ExtrudeGeometry(shape, extrudeSettings);
-    var material = new MeshPhongMaterial({ color: options.color });
+    var material = new MeshPhongMaterial({ color: options.color, transparent: true });
     var mesh = new Mesh(geometry, material);
     mesh.position.set(options.position.x, options.position.y, options.position.z);
     mesh.scale.set(options.scale.x, options.scale.y, options.scale.z);

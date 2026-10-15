@@ -1,0 +1,155 @@
+<script setup>
+  import { onBeforeMount, onMounted, onUnmounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { skins } from '../js/Data.js';
+  import ButtonSettings from './ButtonSettings.vue';
+  import Carousel from './Carousel.vue';
+  import MenuBackground from './MenuBackground.vue';
+
+  const i18n = useI18n({ useScope: 'global' });
+  var emit = defineEmits(['setPage']);
+  var defaultSkin = ref()
+
+  // Add event listener(s)
+  function addEventListeners() {
+    window.addEventListener('keydown', keydown);
+    window.addEventListener('itemSelected', updatePlayerSkin);
+  }
+  
+  // Remove event listeners
+  function removeEventListeners() {
+    window.removeEventListener('keydown', keydown);
+    window.removeEventListener('itemSelected', updatePlayerSkin);
+  }
+
+  // Set initial variables
+  var settings = ref(app.storage.getSettings());
+
+  function updatePlayerSkin(e) {
+    var skin = e.detail;
+    settings.value = app.storage.getSettings(); // Re-read so changes made since opening this page are kept
+    settings.value.general.skin = { id: skin.id, title: skin.title, url: skin.url };
+    if (skin.id == 680) {
+      // Open custom skin options
+      window.dispatchEvent(new CustomEvent('openPopup', {
+        detail: {
+          text: i18n.t('popup.text.custom_skin'),
+          inputs: [
+            { type: 'file', label: i18n.t('popup.button.upload'), class: 'button', style: 'width: 100%', accept: 'image/png, image/jpeg', callback: changeImage },
+            { type: 'button', value: i18n.t('popup.button.close') }
+          ]
+        }
+      }));
+    }
+    else {
+      // Immediately change skin
+      app.player.setSkin({ id: skin.id, url: skin.url });
+      app.updateSettings(settings.value);
+    }
+  }
+
+  function changeImage(e) {
+    var file = e.target.files[0];
+    if (file) {
+      var reader = new FileReader();
+      reader.onloadend = function() {
+        var skin = { id: 680, title: file.name, url: reader.result };
+        settings.value = app.storage.getSettings();
+        settings.value.general.skin = skin;
+        app.player.setSkin(skin);
+        app.updateSettings(settings.value);
+        window.dispatchEvent(new CustomEvent('closePopup'));
+      }
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function exitSkins() {
+    emit('setPage', 'home');
+  }
+
+  function keydown(e) {
+    // Ignore events from inputs
+    if (e.target.value == null) {
+      var jumpKeys = ['Space', 'Enter', 'ArrowUp', 'KeyW'];
+      if (jumpKeys.indexOf(e.code) > -1) {
+        e.preventDefault(); // Prevent scrolling
+        exitSkins();
+      }
+
+      if (e.code == 'Escape' || e.code == 'KeyE') {
+        e.preventDefault();
+        exitSkins();
+      }
+    }
+  }
+
+  function selectSkinFromStorage() {
+    var id = settings.value.general.skin.id;
+    skins.forEach(function(skin) {
+      if (skin.id == id) {
+        defaultSkin.value = skin;
+      }
+    });
+  }
+
+  onBeforeMount(function() {
+    selectSkinFromStorage();
+  });
+  
+  // Run function after being mounted (visible)
+  onMounted(function() {
+    addEventListeners();
+
+    // Dispatch ready event to listeners
+    window.dispatchEvent(new CustomEvent('pageMounted', { detail: 'skins' }));
+  })
+
+  onUnmounted(function() {
+    removeEventListeners();
+  });
+</script>
+
+<template>
+  <div class="page">
+    <div class="background">
+      <MenuBackground />
+    </div>
+    <div class="nav">
+      <a class="button left fade-in" @click="exitSkins" title="Exit to home (ESC)">
+        <span class="material-symbols-rounded">undo</span>
+      </a>
+      <ButtonSettings class="button fade-in" />
+    </div>
+    <div class="content fade-in">
+      <h1>{{ i18n.t('skins.title') }}</h1>
+      <p>{{ i18n.t('skins.description') }}</p>
+      <Carousel :items="skins" :selected="defaultSkin" class="hide-titles" />
+      <div class="footer">
+        <a class="button center fade-in" @click="exitSkins">
+          <span class="material-symbols-rounded">check_box</span>
+          {{ i18n.t('skins.button.select') }}
+        </a>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+  .ui-bubble {
+    .page {
+      .content {
+        padding-bottom: 0;
+      }
+
+      .footer {
+        padding: 1em 0 0;
+        position: relative;
+
+        .center {
+          gap: 0;
+        }
+      }
+    }
+  }
+</style>

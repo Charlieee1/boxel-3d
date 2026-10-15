@@ -1,6 +1,6 @@
 import { DoubleSide, Mesh, MeshPhongMaterial, PlaneGeometry, SRGBColorSpace, TextureLoader, Vector2 } from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { Body, Query, Vector } from 'matter-js';
+import { Body, Composite, Detector, Engine, Query, Vector } from 'matter-js';
 import { Utility } from '../Utility.js';
 import { Cube } from './Cube.js';
 import { Rope } from '../Rope.js';
@@ -24,12 +24,54 @@ class Player extends Cube {
     this.inputBuffer = 0;
     this.addLight('#dc265a', 16000, 500, false);
     this.controls = { left: 0, right: 0, acceleration: 0.5, speed: 4 };
+    // Tracks which movement keys are actually physically held, independent of this.controls - a Reset
+    // block zeroes this.controls to stop momentum, but heldControls still reflects reality so a Control
+    // block touched later (without ever releasing the key) can immediately resume movement
+    this.heldControls = { left: 0, right: 0 };
     this.rope = new Rope();
     this.skin = { url: '' };
 
     // Add an invisible plane to player for rope raycaster mechanics
     this.plane = new Mesh(new PlaneGeometry(1000000, 1000000), new MeshPhongMaterial({ visible: false, side: DoubleSide }));
     this.add(this.plane);
+
+    // Constructor-time physics state, restored per level in deterministic mode (see restoreConstructedBody)
+    this.constructedBody = this.body.parts.map(function(part) { return this.copyPartPhysics(part); }.bind(this));
+  }
+
+  // Plain copy of a Matter part's numeric/vector physics fields
+  copyPartPhysics(part) {
+    var copy = {};
+    for (var key in part) {
+      var value = part[key];
+      if (typeof value === 'number' || typeof value === 'boolean') copy[key] = value;
+      else if (key === 'vertices' || key === 'axes') copy[key] = value.map(function(v) { return { x: v.x, y: v.y }; });
+      else if (key === 'bounds') copy[key] = { min: { x: value.min.x, y: value.min.y }, max: { x: value.max.x, y: value.max.y } };
+      else if (['position', 'positionPrev', 'velocity', 'force', 'positionImpulse', 'constraintImpulse'].indexOf(key) >= 0) copy[key] = Object.assign({}, value);
+    }
+    return copy;
+  }
+
+  // Deterministic mode: the player is reused across levels, so its geometry would otherwise carry the previous
+  // level's scaling history (and a stale resyncBodyGeometry template) - reset it to the constructor-time state
+  restoreConstructedBody() {
+    this.body.parts.forEach(function(part, i) {
+      var saved = this.constructedBody[i];
+      for (var key in saved) {
+        var value = saved[key];
+        if (key === 'vertices' || key === 'axes') {
+          part[key].length = value.length;
+          for (var j = 0; j < value.length; j++) { part[key][j] = part[key][j] || {}; part[key][j].x = value[j].x; part[key][j].y = value[j].y; }
+        }
+        else if (key === 'bounds') { part.bounds.min.x = value.min.x; part.bounds.min.y = value.min.y; part.bounds.max.x = value.max.x; part.bounds.max.y = value.max.y; }
+        else if (typeof value === 'object') Object.assign(part[key], value);
+        else part[key] = value;
+      }
+    }.bind(this));
+    this.position.set(0, 0, 0);
+    this.rotation.set(0, 0, 0);
+    this.scale.set(16, 16, 16);
+    this.geometryTemplate = null;
   }
 
   setColors() {
@@ -41,8 +83,9 @@ class Player extends Cube {
   }
 
   update(delta, alpha) {
-    // Calculate input buffer
-    if (this.jumpBuffer > 0) {
+    // Calculate input buffer (deterministic mode does this per physics tick in updateJumpBuffer)
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    if (this.jumpBuffer > 0 && !isDeterministic) {
       this.jumpBuffer -= delta; // ms
 
       // Automatically jump if buffer is set
@@ -56,9 +99,36 @@ class Player extends Cube {
     super.update(delta, alpha);
   }
 
+  // Deterministic-mode jump buffer: counted down by the fixed physics delay, fired before the tick
+  updateJumpBuffer(delay) {
+    if (this.jumpBuffer > 0) {
+      this.jumpBuffer -= delay;
+      if (this.jumpReady == true) {
+        this.jumpBuffer = 0;
+        this.jump();
+      }
+    }
+  }
+
+  // Deterministic-mode death respawn: counts physics ticks instead of a wall-clock setTimeout
+  updateKillTimer() {
+    if (this.killTicks > 0) {
+      this.killTicks--;
+      if (this.killTicks == 0) this.restart(true);
+    }
+  }
+
+  // A jump is available when grounded or in unlimited jump mode (Power block)
+  hasJump() {
+    return this.jumpReady == true || this.jumpMode == 'unlimited';
+  }
+
   jump() {
+    // No jumping while dead, so no jump force or buffered jump carries through the respawn
+    if (this.isFrozen() == true) return;
+
     if (this.mode == 'jump' || this.mode == 'control') {
-      if (this.jumpReady == true || this.jumpMode == 'unlimited') {
+      if (this.hasJump()) {
         this.jumpReady = false;
   
         // Define jump conditions
@@ -88,6 +158,7 @@ class Player extends Cube {
         Body.setVelocity(this.body, velocity);
         Body.setAngularVelocity(this.body, angularVelocity);
         Body.applyForce(this.body, this.body.position, force);
+        this.jumpPending = true; // Force is applied on the next engine tick, and survives a reset in between
 
         // Play jump sound
         app.assets.audio.play('pop2');
@@ -101,6 +172,14 @@ class Player extends Cube {
 
   setControls(name, value) {
     this.controls[name] = value;
+    this.heldControls[name] = value;
+  }
+
+  // Restores this.controls from the physically-held keys, without waiting for another keydown/keyup -
+  // used when re-entering control mode (ex: a Control block) after a Reset block zeroed this.controls
+  syncControlsFromHeld() {
+    this.controls.left = this.heldControls.left;
+    this.controls.right = this.heldControls.right;
   }
 
   setInputBuffer(value) {
@@ -132,13 +211,22 @@ class Player extends Cube {
     if (this.mode == 'grapple' && this.isFrozen() == false){
       var spacing = 4; // Smaller = more precise
       var length = 400; // How far to check for objects beyond p2
-      var dx = mouse.x - this.position.x;
-      var dy = mouse.y - this.position.y;
+
+      // Anchor from the true physics position in deterministic mode - this.position is a
+      // render-interpolated value (see Cube.update's alpha blend) that can offset the rope's anchor
+      // by a wall-clock-timing-dependent amount; non-deterministic mode keeps the original
+      // (interpolated) source so existing runs/records made against that behavior stay comparable.
+      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+      var originX = isDeterministic ? this.body.position.x : this.position.x;
+      var originY = isDeterministic ? -this.body.position.y : this.position.y;
+
+      var dx = mouse.x - originX;
+      var dy = mouse.y - originY;
       var distance = Math.sqrt(dx * dx + dy * dy);
-      var p1 = { x: this.position.x, y: -this.position.y };
-      var p2 = { 
-        x: (this.position.x + (mouse.x - this.position.x) * length / distance),
-        y: -(this.position.y + (mouse.y - this.position.y) * length / distance)
+      var p1 = { x: originX, y: -originY };
+      var p2 = {
+        x: (originX + (mouse.x - originX) * length / distance),
+        y: -(originY + (mouse.y - originY) * length / distance)
       };
 
       // Clear existing rope to prevent duplicate chains
@@ -199,17 +287,34 @@ class Player extends Cube {
     if (this.isFrozen() == false) {
       this.freeze(true);
       this.visible = false;
-      this.killTimeout = setTimeout(function() { this.restart(); }.bind(this), 1000); // Respawn in 1 second
+      var settings = app.storage.getSettings();
+      var isDeterministic = settings.invalidatingSettings.deterministic === true;
+      // Respawn in 1 second (bypasses manual respawn gate, this is automatic); deterministic mode counts 60 ticks
+      if (isDeterministic) this.killTicks = 60;
+      else {
+        this.killTimeRemaining = 1000;
+        this.resumeRestart();
+      }
+      var particleColor = settings.general.deathParticleColour || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
+
+      // Spawn from the true physics position in deterministic mode - this.position is a
+      // render-interpolated value (see Cube.update's alpha blend) that can offset where these new
+      // physics bodies spawn by a wall-clock-timing-dependent amount; non-deterministic mode keeps
+      // the original (interpolated) source so existing runs/records made against that behavior stay
+      // comparable.
+      var originX = isDeterministic ? this.body.position.x : this.position.x;
+      var originY = isDeterministic ? -this.body.position.y : this.position.y;
+
       for (var row = -rows / 2; row < rows / 2; row++) {
         for (var col = -cols / 2; col < cols / 2; col++) {
           var randAngle = this.util.randomNumber(0, 360 * (Math.PI / 180));
           var particleData = {
-            color: this.color,
-            position: { 
-              x: this.position.x + (col * scale.x) + (scale.x / 2),
-              y: this.position.y + (row * scale.y) + (scale.y / 2), 
+            color: particleColor,
+            position: {
+              x: originX + (col * scale.x) + (scale.x / 2),
+              y: originY + (row * scale.y) + (scale.y / 2),
               z: 0
             },
             rotation: { x: 0, y: 0, z: randAngle },
@@ -221,7 +326,7 @@ class Player extends Cube {
           app.level.setObjectProperties(particle, particleData);
           app.level.addObject(particle);
           particle.isParticle = true;
-          particle.setColors(this.color);
+          particle.setColors(particleColor);
           Body.setVelocity(particle.body, this.body.velocity);
         }
       }
@@ -235,8 +340,29 @@ class Player extends Cube {
   }
 
   cancelRestart() {
-    // Clear potential timeout from player kill
+    // Clear potential timeout/tick countdown from player kill
     clearTimeout(this.killTimeout);
+    this.killTimeout = null;
+    this.killTimeRemaining = 0;
+    this.killTicks = 0;
+  }
+
+  // Non-deterministic death respawn is a wall-clock timeout, so it's paused/resumed with the game (ticks only count while playing)
+  pauseRestart() {
+    if (this.killTimeout == null) return;
+    clearTimeout(this.killTimeout);
+    this.killTimeout = null;
+    this.killTimeRemaining = Math.max(1, this.killTimeRemaining - (Date.now() - this.killTimeoutStart));
+  }
+
+  resumeRestart() {
+    if (this.killTimeout != null || !(this.killTimeRemaining > 0)) return;
+    this.killTimeoutStart = Date.now();
+    this.killTimeout = setTimeout(function() {
+      this.killTimeout = null;
+      this.killTimeRemaining = 0;
+      this.restart(true);
+    }.bind(this), this.killTimeRemaining);
   }
 
   saveCheckpoint(position) {
@@ -260,9 +386,38 @@ class Player extends Cube {
     }
   }
 
+  // Zero every body's warm-start solver bias (not just the player's) and clear the pair cache -
+  // Matter's Resolver carries positionImpulse/constraintImpulse across ticks to smooth out
+  // resolution (see Resolver.postSolvePosition), so leftover bias on nearby blocks would still
+  // nudge them post-respawn even though Engine.clear() itself only resets contact/pair history
+  resetDeterministicPhysics() {
+    var bodies = Composite.allBodies(app.engine.world);
+    for (var i = 0; i < bodies.length; i++) {
+      var body = bodies[i];
+      body.positionImpulse.x = 0;
+      body.positionImpulse.y = 0;
+      body.constraintImpulse.x = 0;
+      body.constraintImpulse.y = 0;
+      body.constraintImpulse.angle = 0;
+      body.motion = 0; // Sleeping.update's biased average, not reset by resetToOrigin's setVelocity(0)
+      body.sleepCounter = 0; // ticks-below-threshold counter, same as a freshly-built body starts with
+      body.isSleeping = false; // a body asleep from the last run stays asleep - Engine skips gravity/integration for it entirely
+    }
+    Engine.clear(app.engine);
+
+    // Engine.clear() empties the detector's own body list (Detector.clear), but Matter only
+    // repopulates it inside Engine.update() when world.isModified is true (a body was added/removed) -
+    // resetToOrigin() only repositions existing bodies, it never adds/removes any, so without this,
+    // world.isModified stays false and detector.bodies would stay empty forever, silently disabling
+    // all collision detection from this point on.
+    Detector.setBodies(app.engine.detector, bodies);
+  }
+
   respawn(override = false) {
     // Override is used when a checkpoint set
     if (this.isFrozen() == true || override == true) {
+      // Deterministic mode's impulse/pair-cache reset happens in Level.retryLevel() - this is only
+      // ever called from its checkpoint branch, which runs after that reset already.
       app.level.removeParticles();
       this.resetToOrigin();
       this.setPositionToCheckpoint();
@@ -272,7 +427,13 @@ class Player extends Cube {
     }
   }
 
-  restart() {
+  restart(isAutomatic = false) {
+    // Gate manual checkpoint respawn if disabled at level - automatic death respawn (from kill()) and the death animation (frozen) bypass this
+    if (isAutomatic !== true && app.level.disableManualCheckpointRespawn === true && this.isFrozen() == false) return;
+
+    // Deterministic mode's impulse/pair-cache reset happens in Level.retryLevel() below, which this
+    // always calls - a single canonical reset point for every restart path (R key, automatic
+    // kill-restart, checkpoint respawn).
     app.level.retryLevel(true);
 
     // Dispatch restart event
@@ -355,12 +516,31 @@ class Player extends Cube {
     this.addTexture(skin);
   }
 
-  reset() {
-    app.updateGravity();
-    this.setForceDirection();
-    this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
-    this.setMode(this.modeOrigin, false);
-    this.setJumpMode(this.jumpModeOrigin, false);
+  reset(config = {}) {
+    // Matches old pre-config reset() behavior: only size, player mode, force, jump mode
+    var resetConfig = {
+      resetSize: true,
+      resetPlayerMode: true,
+      resetForce: true,
+      resetRotation: false,
+      resetVelocity: false,
+      resetAngularVelocity: false,
+      resetPlayerCheckpoint: false,
+      resetInfiniteJumpMode: true,
+      resetGravity: true,
+      resetCameraRotationAnimation: false,
+      ...config
+    };
+    if (resetConfig.resetGravity) app.updateGravity();
+    if (resetConfig.resetCameraRotationAnimation) app.resetCameraRotation();
+    if (resetConfig.resetForce) this.setForceDirection(this.forceOrigin, false);
+    if (resetConfig.resetSize) this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
+    if (resetConfig.resetPlayerMode) this.setMode(this.modeOrigin, false);
+    if (resetConfig.resetInfiniteJumpMode) this.setJumpMode(this.jumpModeOrigin, false);
+    if (resetConfig.resetRotation) this.setRotation(this.rotationOrigin, false);
+    if (resetConfig.resetVelocity) Body.setVelocity(this.body, { x: 0, y: 0 });
+    if (resetConfig.resetAngularVelocity) Body.setAngularVelocity(this.body, 0);
+    if (resetConfig.resetPlayerCheckpoint) this.removeCheckpoint();
     this.controls.left = this.controls.right = 0;
     this.jumpBuffer = 0;
 

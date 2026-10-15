@@ -864,15 +864,91 @@
     ]
   },
   {
+    "version": "2.9.2-m1.0.0",
+    "revisions": [
+      "Added LEO as built-in feature",
+      "Added new splash text"
+    ]
+  },
+  {
     "version": "2.9.3",
     "revisions": [
       "Fixed low FPS bug"
     ]
   },
   {
-    "version": "2.9.4",
+    "version": "2.9.3-m1.1.0",
+    "revisions": [
+      "Added thin fast build mode",
+      "Added textbox to change default building plane",
+      "Added hover gizmo mode",
+      "Improved multiselect",
+      "Added force build mode",
+      "Added extra keybinds",
+      "Added block cutting operation",
+      "Added current action display overlay",
+      "Added default block colour setting",
+      "Added autosave",
+      "Added two new snap modes in level editor",
+      "Added chain simulation operation",
+      "Border around power block icon removed",
+      "Added rotation around pivot",
+      "Added temporary player start positions",
+      "Added new settings tab"
+    ]
+  },
+  {
+    "version": "2.9.3-m1.2.0",
+    "revisions": [
+      "Fixed bugs",
+      "Force set canjump to true at start of every level",
+      "Enable main level pack by default",
+      "Added determinstic mode",
+      "Added death block property",
+      "Added opacity property",
+      "Added reset block properties",
+      "Added theme customization",
+      "Added more settings",
+      "Added level properties",
+      "Delete old ui"
+    ]
+  },
+  {
+    "version": "2.9.3-m1.2.1",
+    "revisions": [
+      "Fixed deterministic mode bugs",
+      "Fixed jump indicator bug"
+    ]
+  },
+  {
+    "version": "2.9.3-m1.2.2",
+    "revisions": [
+      "Fixed deterministic mode"
+    ]
+  },
+  {
+    "version": "2.9.4-m1.2.2",
     "revisions": [
       "Fixed level editor cube deletion bug while rotating"
+    ]
+  },
+  {
+    "version": "2.9.4-m1.2.3",
+    "revisions": [
+      "Fixed deterministic mode",
+      "Fixed bug when level had no set theme",
+      "Changed internal settings structure",
+      "Moved thumbnail storage to IndexedDB",
+      "Fixed zoom setting bugs",
+      "Changed default settings",
+      "Fixed camera bugs in level editor",
+      "Fixed undo/redo",
+      "Fixed multiselect box select",
+      "Added reset block property to reset camera rotation animation",
+      "Fixed jump indicator",
+      "Enabled manual respawn during death animation always",
+      "Fixed level editor popups",
+      "Fixed bugs"
     ]
   }
 ]

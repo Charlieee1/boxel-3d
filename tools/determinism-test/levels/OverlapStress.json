@@ -1,0 +1,101 @@
+{
+  "name": "Overlap Stress Test",
+  "children": [
+    {
+      "class": "player",
+      "position": { "x": 0, "y": 0, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "bounce",
+      "position": { "x": -96, "y": 0, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": -1.5707963267948966 },
+      "scale": { "x": 192, "y": 16, "z": 16 }
+    },
+    {
+      "class": "bounce",
+      "position": { "x": 96, "y": 0, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 1.5707963267948966 },
+      "scale": { "x": 192, "y": 16, "z": 16 }
+    },
+    {
+      "class": "bounce",
+      "position": { "x": 0, "y": 96, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 3.141592653589793 },
+      "scale": { "x": 192, "y": 16, "z": 16 }
+    },
+    {
+      "class": "bounce",
+      "position": { "x": 0, "y": -96, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 192, "y": 16, "z": 16 }
+    },
+    {
+      "class": "cube",
+      "position": { "x": -36, "y": 40, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "cube",
+      "position": { "x": -36, "y": 64, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "bounce",
+      "position": { "x": -12, "y": 40, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "bounce",
+      "position": { "x": -12, "y": 64, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "direction",
+      "position": { "x": 12, "y": 40, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "direction",
+      "position": { "x": 12, "y": 64, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "grapple",
+      "position": { "x": 36, "y": 40, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    },
+    {
+      "class": "grapple",
+      "position": { "x": 36, "y": 64, "z": 0 },
+      "rotation": { "x": 0, "y": 0, "z": 0 },
+      "scale": { "x": 16, "y": 16, "z": 16 },
+      "isStatic": false,
+      "friction": 0
+    }
+  ]
+}
