@@ -15,6 +15,7 @@ Fixed bug when level had no set theme
 Changed internal settings structure
 Moved thumbnail storage to IndexedDB
 Fixed zoom setting bugs
+Changed default settings
 
 v2.9.3-m1.2.2
 Fixed deterministic mode

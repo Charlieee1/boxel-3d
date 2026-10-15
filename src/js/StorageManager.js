@@ -279,7 +279,7 @@ class StorageManager {
         hitboxes: false,
         inputBuffer: 0,
         jumpIndicator: false,
-        saveInvalidRuns: true,
+        saveInvalidRuns: false,
         zoom: 180
       },
       graphics: {
@@ -343,7 +343,7 @@ class StorageManager {
         preset: 'bubble'
       },
       audio: {
-        music: 'boxel-3d-pro',
+        music: 'boxel-3d-classic',
         volume: util.isExtension() ? 0 : 0.5,
         volumeMusic: 0.5,
         volumeEffects: 1
