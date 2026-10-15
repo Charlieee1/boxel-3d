@@ -22,6 +22,7 @@ Fixed multiselect box select
 Added reset block property to reset camera rotation animation
 Fixed jump indicator
 Enabled manual respawn during death animation always
+Fixed level editor popups
 
 v2.9.3-m1.2.2
 Fixed deterministic mode

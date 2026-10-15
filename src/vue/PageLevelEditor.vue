@@ -636,7 +636,7 @@
       detail: {
         text: 'Edit',
         inputs: [
-          { value: app.selectedObject.text, type: 'text', callback: updateText },
+          { value: app.selectedObject.text, type: 'text', class: 'small-text', callback: updateText },
           { value: 'Cancel', type: 'button' },
           { value: 'Close', type: 'button' }
         ]
@@ -650,8 +650,8 @@
       detail: {
         text: 'Set Camera Position',
         inputs: [
-          { label: 'X', type: 'text', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
-          { label: 'Y', type: 'text', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
+          { label: 'X', type: 'text', class: 'half-width', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
+          { label: 'Y', type: 'text', class: 'half-width', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
           { value: 'Close', type: 'button' }
         ]
       }

@@ -1,6 +1,4 @@
 # Bugs
-- Possible bug with checkpoint position deterministic mode
-- Textbox text not modifiable
 - Settings menu isn't consistent in main menu and level editor (tab missing in main menu)
 - Jump indicator changes visual size relative to play depending on screen size
   - All UI

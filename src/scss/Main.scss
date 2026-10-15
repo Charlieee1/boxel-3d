@@ -633,6 +633,52 @@
           white-space: pre-line;
         }
   
+        // Text fields sit in the popup body (not the bottom button row) so typed text stays visible
+        .fields {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5em;
+          padding-bottom: 0.5em;
+
+          .field {
+            align-items: center;
+            display: flex;
+            gap: 0.5em;
+          }
+
+          label {
+            flex-shrink: 0;
+          }
+
+          input[type="text"] {
+            background-color: var(--theme-accent-color, #EB2B6D);
+            border: none;
+            border-radius: var(--theme-corner-radius, 0.5em);
+            box-shadow: inset 0em 0.25em 0em rgba(#000000, 0.15);
+            box-sizing: border-box;
+            color: #ffffff;
+            flex-grow: 1;
+            font-family: inherit;
+            font-size: 1em;
+            min-width: 0;
+            outline: none;
+            padding: 0.5em;
+            text-shadow: 0em 0.125em 0em rgba(#000000, 0.25);
+            width: 100%;
+          }
+
+          // Takes half the free space a field normally fills (flex-grow below 1 claims only that fraction)
+          input.half-width {
+            flex: 0.5 1 0;
+          }
+
+          // Half-size text so more of a long value fits; height in its own (halved) em keeps the box as tall as a normal field
+          input.small-text {
+            font-size: 0.5em;
+            height: 4.25em;
+          }
+        }
+
         .inputs {
           bottom: 0;
           display: flex;

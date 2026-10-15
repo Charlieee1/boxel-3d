@@ -31,21 +31,19 @@
   function openPopup(e) {
     isOpen.value = true;
 
-    // Assign values from custom event detail
+    // Assign values from custom event detail (always reassigned so a previous popup's text never lingers)
     if (e.detail) {
-      if (e.detail.text) {
-        // Check title i18n
-        if (i18n.te(e.detail.title, i18n.fallbackLocale.value)) title.value = i18n.t(e.detail.title);
-        else title.value = e.detail.title;
+      // Check title i18n
+      if (i18n.te(e.detail.title, i18n.fallbackLocale.value)) title.value = i18n.t(e.detail.title);
+      else title.value = e.detail.title;
 
-        // Check text i18n
-        if (i18n.te(e.detail.text, i18n.fallbackLocale.value)) text.value = i18n.t(e.detail.text);
-        else text.value = e.detail.text;
+      // Check text i18n
+      if (i18n.te(e.detail.text, i18n.fallbackLocale.value)) text.value = i18n.t(e.detail.text);
+      else text.value = e.detail.text;
 
-        // Check description i18n
-        if (i18n.te(e.detail.description, i18n.fallbackLocale.value)) description.value = i18n.t(e.detail.description);
-        else description.value = e.detail.description;
-      }
+      // Check description i18n
+      if (i18n.te(e.detail.description, i18n.fallbackLocale.value)) description.value = i18n.t(e.detail.description);
+      else description.value = e.detail.description;
       if (e.detail.inputs) {
         inputs.value = e.detail.inputs;
         inputs.value.forEach(function(input) {
@@ -148,14 +146,25 @@
           <h1 class="title" v-html="title" v-if="title"></h1>
           <p class="text" v-html="text" v-if="text"></p>
           <p class="description" v-html="description" v-if="description"></p>
+          <!-- Text fields are the popup's main content so the text being typed is visible -->
+          <div class="fields" v-if="inputs.some(input => input.type == 'text')">
+            <template v-for="(input, index) of inputs">
+              <div class="field" v-if="input.type == 'text'">
+                <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
+                <input :class="input.class" :id="'popup-' + input.type + '-' + index" type="text" :value="input.value" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+              </div>
+            </template>
+          </div>
           <div class="inputs">
             <template v-for="(input, index) of inputs">
-              <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
-              <template v-if="input.type == 'button'">
-                <button :class="{ [input.class]: input.class, 'selected': index == inputs.length - 1 }" :id="'popup-' + input.type + '-' + index" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">{{ input.value }}</button>
-              </template>
-              <template v-else>
-                <input :class="input.class" :id="'popup-' + input.type + '-' + index" :type="input.type" :value="input.value" :min="input.min" :max="input.max" :step="input.step" :accept="input.accept" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+              <template v-if="input.type != 'text'">
+                <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
+                <template v-if="input.type == 'button'">
+                  <button :class="{ [input.class]: input.class, 'selected': index == inputs.length - 1 }" :id="'popup-' + input.type + '-' + index" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">{{ input.value }}</button>
+                </template>
+                <template v-else>
+                  <input :class="input.class" :id="'popup-' + input.type + '-' + index" :type="input.type" :value="input.value" :min="input.min" :max="input.max" :step="input.step" :accept="input.accept" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+                </template>
               </template>
             </template>
           </div>
