@@ -1,4 +1,4 @@
-import { Euler, Mesh, MeshBasicMaterial, Object3D, Plane, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
+import { Euler, Matrix4, Mesh, MeshBasicMaterial, Object3D, Plane, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
 import { Body, Composite, Engine, World } from 'matter-js';
 import { PuttyControls } from './PuttyControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
@@ -6,6 +6,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 // Scratch vector reused for world -> screen projection (multiselect marquee).
 const _screenVec = new Vector3();
+const _boxMatrix = new Matrix4();
+
+// Faces of a unit box as indices into its 8 corners (bit 0 = +x, bit 1 = +y, bit 2 = +z)
+const BOX_FACES = [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]];
 
 // Tuning for "P" chain physics' invisible settle simulation (see LevelEditor.settleChainAndBake) - a
 // one-time level-authoring aid, not a live gameplay loop, so these are UX-tuning constants rather than
@@ -704,18 +708,56 @@ class LevelEditor {
       var obj = children[i];
       if (obj.isCube !== true || obj === app.player) continue;
       if (obj === this.exclusiveAction?.controlBlock) continue;
-      var s = this.projectToScreen(obj.position);
-      if (s.x >= left && s.x <= right && s.y >= top && s.y <= bottom) result.push(obj);
+      var corners = this.getScreenCorners(obj);
+      // Any covered part of the block selects it; fall back to its centre if part of it is behind the camera
+      if (corners == null) {
+        var s = this.projectToScreen(obj.position);
+        if (s.x >= left && s.x <= right && s.y >= top && s.y <= bottom) result.push(obj);
+      }
+      else if (BOX_FACES.some(face => this.polygonIntersectsRect(face.map(i => corners[i]), left, top, right, bottom))) result.push(obj);
     }
     return result;
   }
 
-  // Project a world position to 2D screen (client) coordinates.
+  // Project a block's 8 box corners (rotation and negative scale included) to screen space, or null if any is behind the camera
+  getScreenCorners(obj) {
+    _boxMatrix.compose(obj.position, obj.quaternion, obj.scale);
+    var corners = [];
+    for (var i = 0; i < 8; i++) {
+      var corner = new Vector3(i & 1 ? 0.5 : -0.5, i & 2 ? 0.5 : -0.5, i & 4 ? 0.5 : -0.5).applyMatrix4(_boxMatrix);
+      var s = this.projectToScreen(corner);
+      if (s.z > 1) return null;
+      corners.push(s);
+    }
+    return corners;
+  }
+
+  // Separating axis test between a convex screen polygon and an axis-aligned screen rect
+  polygonIntersectsRect(points, left, top, right, bottom) {
+    var rect = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
+    var axes = [{ x: 1, y: 0 }, { x: 0, y: 1 }];
+    for (var i = 0; i < points.length; i++) {
+      var a = points[i], b = points[(i + 1) % points.length];
+      if (a.x !== b.x || a.y !== b.y) axes.push({ x: a.y - b.y, y: b.x - a.x });
+    }
+    var project = (list, axis) => {
+      var min = Infinity, max = -Infinity;
+      list.forEach(p => { var d = p.x * axis.x + p.y * axis.y; min = Math.min(min, d); max = Math.max(max, d); });
+      return { min, max };
+    };
+    return axes.every(axis => {
+      var p = project(points, axis), r = project(rect, axis);
+      return p.max >= r.min && r.max >= p.min;
+    });
+  }
+
+  // Project a world position to 2D screen (client) coordinates, with NDC depth (z > 1 means behind the camera).
   projectToScreen(position) {
     _screenVec.set(position.x, position.y, position.z).project(app.camera);
     return {
       x: (_screenVec.x * 0.5 + 0.5) * app.window.innerWidth,
-      y: (-_screenVec.y * 0.5 + 0.5) * app.window.innerHeight
+      y: (-_screenVec.y * 0.5 + 0.5) * app.window.innerHeight,
+      z: _screenVec.z
     };
   }
 
