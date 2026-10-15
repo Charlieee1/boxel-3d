@@ -233,8 +233,9 @@ Not every block type has every control. The player has no Pin or Color.
 
 | Option | Default |
 |---|---|
-| Size, Player Mode, Force, Infinite Jump Mode | On |
+| Size, Player Mode, Force, Infinite Jump Mode, Gravity | On |
 | Rotation (Z only), Velocity, Angular Velocity, Player Checkpoint | Off |
+| Camera Rotation Animation (stops any camera turn in progress and snaps the camera upright) | Off |
 
 ---
 

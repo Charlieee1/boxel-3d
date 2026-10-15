@@ -19,6 +19,7 @@ Changed default settings
 Fixed camera bugs in level editor
 Fixed undo/redo
 Fixed multiselect box select
+Added reset block property to reset camera rotation animation
 
 v2.9.3-m1.2.2
 Fixed deterministic mode

@@ -626,13 +626,20 @@ class App {
       angle *= -1;
       if (angle < 0) app.camera.rotation.z = (app.camera.rotation.z - (Math.PI * 2)) % (Math.PI * 2);
       scale = (Math.abs((angle + Math.PI) % (Math.PI)) / (Math.PI / 2)) + 1; // 0deg = 1, 90deg = 2
-      app.animation.tween({ object: app.camera.rotation, to: { z: angle }, duration: 250 }).start();
+      app.cameraRotationTween = app.animation.tween({ object: app.camera.rotation, to: { z: angle }, duration: 250 }).start();
       app.background.animateScale(scale);
     }
     else {
       app.camera.rotation.z = 0;
       app.background.animateScale(1);
     }
+  }
+
+  // Stop any camera rotation animation and instantly unrotate the camera
+  resetCameraRotation() {
+    if (this.cameraRotationTween) this.cameraRotationTween.stop();
+    this.cameraRotationTween = null;
+    this.camera.rotation.z = 0;
   }
 
   updateQuality(quality) {

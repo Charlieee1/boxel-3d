@@ -496,9 +496,11 @@ class Player extends Cube {
       resetPlayerCheckpoint: false,
       resetInfiniteJumpMode: true,
       resetGravity: true,
+      resetCameraRotationAnimation: false,
       ...config
     };
     if (resetConfig.resetGravity) app.updateGravity();
+    if (resetConfig.resetCameraRotationAnimation) app.resetCameraRotation();
     if (resetConfig.resetForce) this.setForceDirection(this.forceOrigin, false);
     if (resetConfig.resetSize) this.setScale({ x: this.scaleOrigin.x, y: this.scaleOrigin.y, z: this.scaleOrigin.z }, false);
     if (resetConfig.resetPlayerMode) this.setMode(this.modeOrigin, false);

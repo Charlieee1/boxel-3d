@@ -1070,6 +1070,10 @@
           <span class="label">Gravity</span>
           <input type="checkbox" :checked="selectedObject.getResetConfig().resetGravity" @change="updateResetConfig('resetGravity', $event)">
         </div>
+        <div class="property-row">
+          <span class="label">Camera Rotation Animation</span>
+          <input type="checkbox" :checked="selectedObject.getResetConfig().resetCameraRotationAnimation" @change="updateResetConfig('resetCameraRotationAnimation', $event)">
+        </div>
       </div>
     </FancyPopup>
     <div class="footer">
