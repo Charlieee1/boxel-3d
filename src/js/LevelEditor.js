@@ -2075,8 +2075,8 @@ class LevelEditor {
   }
 
   rewind() {
-    // Exiting to a clean edit state - never re-teleport to the temp spawn override here
-    app.level.retryLevel(true, false);
+    // Full restart to a clean edit state: player at its origin, checkpoint cleared, no temp spawn override
+    app.level.retryLevel(false, false);
     app.level.deselectLevel();
     app.levelEditor.detachControls();
     app.pauseLevel();
@@ -2118,22 +2118,26 @@ class LevelEditor {
     this.currentZ = value;
   }
 
-  // "[" resets camera Z + rotation to default, relative to the current Z-plane (see keybinds.md "Current Z").
-  // Uses controlsOrbit.reset() (same mechanism as the "Restart level" rewind) instead of raw camera writes,
-  // since OrbitControls recomputes the camera quaternion from its own internal state every frame and would
-  // otherwise silently fight/overwrite a direct camera.rotation.set() (causing a black-screen desync).
+  // "[" resets the camera onto the player, unrotated, at the default zoom relative to the current Z-plane
   resetCameraZRotation() {
-    var targetX = this.controlsOrbit.target.x;
-    var targetY = this.controlsOrbit.target.y;
-    this.controlsOrbit.reset();
-    this.controlsOrbit.target.x = targetX;
-    this.controlsOrbit.target.y = targetY;
-    app.camera.position.x = targetX;
-    app.camera.position.y = targetY;
-    app.camera.position.z += this.currentZ;
+    var player = app.player.position;
+    this.controlsOrbit.target.set(player.x, player.y, player.z);
+    app.camera.position.set(player.x, player.y, app.camera.position.zDefault + this.currentZ);
+    app.camera.rotation.set(0, 0, 0);
     this.controlsOrbit.update();
     app.camera.updateMatrixWorld();
     this.updateRender();
+  }
+
+  // Entering a level: camera looks straight at 0,0 at the level's zoom, saved as the orbit reset state
+  resetCameraToOrigin() {
+    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.set(0, 0, app.camera.position.zDefault);
+    app.camera.rotation.set(0, 0, 0);
+    this.controlsOrbit.target.set(0, 0, 0);
+    this.controlsOrbit.update();
+    app.camera.updateMatrixWorld();
+    this.controlsOrbit.saveState();
   }
 
   // Reset camera state: zoomed out to the zoom setting and looking straight at the player
@@ -2148,13 +2152,17 @@ class LevelEditor {
 
   // "]" popup: type an exact camera X or Y directly.
   setCameraX(value) {
-    app.camera.position.x = parseFloat(value) || 0;
+    var delta = (parseFloat(value) || 0) - app.camera.position.x;
+    app.camera.position.x += delta;
+    this.controlsOrbit.target.x += delta; // Pan the orbit target too so the view direction is kept
     app.camera.updateMatrixWorld();
     this.updateRender();
   }
 
   setCameraY(value) {
-    app.camera.position.y = parseFloat(value) || 0;
+    var delta = (parseFloat(value) || 0) - app.camera.position.y;
+    app.camera.position.y += delta;
+    this.controlsOrbit.target.y += delta; // Pan the orbit target too so the view direction is kept
     app.camera.updateMatrixWorld();
     this.updateRender();
   }

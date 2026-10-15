@@ -49,7 +49,7 @@
         app.levelHistory.save('Loaded level'); // Force dialog check to save
         app.resetScene();
         app.levelEditor.controlsOrbit.enabled = true;
-        app.levelEditor.controlsOrbit.reset();
+        app.levelEditor.resetCameraToOrigin();
         app.graphics.render();
         emit('setPage', 'level-editor');
       }
@@ -73,7 +73,7 @@
     app.levelHistory.save('Edited level');
     app.resetScene();
     app.levelEditor.controlsOrbit.enabled = true;
-    app.levelEditor.controlsOrbit.reset();
+    app.levelEditor.resetCameraToOrigin();
     app.graphics.render();
     emit('setPage', 'level-editor');
   }

@@ -408,18 +408,19 @@
     app.levelEditor.redo();
   }
 
+  let pausedCameraRoll = null; // Camera roll of a paused playtest run, null when the next play starts fresh
+
   function rewind() {
-    pauseLevel();
     app.levelEditor.rewind();
-    app.levelEditor.controlsOrbit.target.copy(app.player.position);
+    pausedCameraRoll = null; // Next play starts a fresh run
+    pauseLevel(); // Recover editor controls with the camera on the reset player
   }
 
   function pauseLevel() {
+    // Remember the gravity camera roll so resuming the run restores it
+    if (app.play == true) pausedCameraRoll = app.camera.rotation.z;
     objectTypeVisible.value = true;
     app.pauseLevel();
-    // Restore every object (including the player) to its real saved state - undoes playtest physics drift
-    // and any "Set as start position" temp spawn override, same reset retryLevel() uses to start a fresh run.
-    app.resetScene();
     app.level.deselectLevel();
     app.levelEditor.controlsOrbit.enabled = true;
     app.levelEditor.controlsOrbit.reset();
@@ -430,6 +431,7 @@
   }
   
   function playCurrentLevel() {
+    var isResuming = pausedCameraRoll != null;
     objectTypeVisible.value = false;
     app.background.visible = true;
     app.level.deselectLevel();
@@ -438,15 +440,23 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
-    // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
-    app.levelEditor.applyTempSpawn();
-    app.player.cancelRestart(); // same cleanup App.playLevel()/Level.retryLevel() do - this is a 3rd "start playing" entry point they don't cover
-    // Deterministic mode only: App.playLevel()/Level.retryLevel() reset gravity to default too - a gravity
-    // block's trigger otherwise carries over across pause/play. Non-deterministic mode never reset gravity
-    // here before, so this stays opt-in to avoid changing existing (non-deterministic) editor behavior.
-    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
-      app.player.resetDeterministicPhysics();
-      app.updateGravity();
+
+    // Resuming a paused run continues where it left off, so skip the fresh-start setup
+    if (isResuming) {
+      app.camera.rotation.z = pausedCameraRoll;
+      pausedCameraRoll = null;
+    }
+    else {
+      // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
+      app.levelEditor.applyTempSpawn();
+      app.player.cancelRestart(); // same cleanup App.playLevel()/Level.retryLevel() do - this is a 3rd "start playing" entry point they don't cover
+      // Deterministic mode only: App.playLevel()/Level.retryLevel() reset gravity to default too - a gravity
+      // block's trigger otherwise carries over across pause/play. Non-deterministic mode never reset gravity
+      // here before, so this stays opt-in to avoid changing existing (non-deterministic) editor behavior.
+      if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
+        app.player.resetDeterministicPhysics();
+        app.updateGravity();
+      }
     }
     app.startLevel();
   }

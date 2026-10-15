@@ -1,11 +1,4 @@
 # Bugs
-- When finishing a level with a custom zoom value, zoom value (and lock) carries over
-- Localstorage only some parts deleted occasionally
-  - input buffer and level packs
-- Pressing reset level in level editor doesn't reset cam pos
-  - Keybind sometimes doesn't reset cam pos (resets to 0,0 sometimes)
-  - Camera sometimes messed up when playtesting level after failing to reset cam pos in editor mode
-  - Messed up camera pos leads to wrong rotation, and rotation is preserved into gameplay
 - Undo/redo doesn't work
 - Multiselect only selects centres of blocks
 - Guide is very unclear

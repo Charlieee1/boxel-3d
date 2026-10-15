@@ -649,6 +649,8 @@ class App {
   saveOrbitState() {
     // Keep the game camera perpendicular while preserving z tilt from gravity.
     if (this.state == 'level-editor') {
+      // Save the camera straight in front of the player so resetting the orbit never skews its rotation
+      this.camera.position.set(this.player.position.x, this.player.position.y + this.camera.tilt, this.camera.position.zDefault);
       this.camera.rotation.x = 0;
       this.camera.rotation.y = 0;
       this.camera.updateMatrixWorld();
@@ -689,12 +691,10 @@ class App {
     app.play = true;
     app.timer.start();
 
-    // Adjust camera zoom
-    if (app.level.zoom) {
-      app.camera.position.zDefault = app.level.zoom;
-      app.camera.position.z = app.level.zoom;
-      app.saveOrbitState();
-    }
+    // Adjust camera zoom and save a straight-on camera as the orbit reset state
+    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.z = app.camera.position.zDefault;
+    app.saveOrbitState();
 
     // Play jump sound
     this.assets.audio.play('jump');
