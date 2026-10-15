@@ -207,7 +207,7 @@ Toolbar → **Level Properties** icon → popup. Each change applies immediately
 | Zoom | 180 | Camera distance for this level. Locks the player's zoom setting while playing it |
 | Theme | classic | Visual theme. Blocks still using the old theme's colour are recoloured |
 | Default Block Color | theme colour | Colour of newly placed blocks |
-| Disable Manual Respawn | Off | Blocks the **C** key / checkpoint button during play (respawn after death still works) |
+| Disable Manual Respawn | Off | Blocks the **C** key / checkpoint button while alive. During the death animation **C** still respawns early, and respawn after death still happens automatically |
 | Level UI Text | empty | Text/HTML shown on screen while playing |
 
 ---

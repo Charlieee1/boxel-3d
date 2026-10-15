@@ -401,8 +401,8 @@ class Player extends Cube {
   }
 
   restart(isAutomatic = false) {
-    // Gate manual checkpoint respawn if disabled at level - automatic death respawn (from kill()) always bypasses this
-    if (isAutomatic !== true && app.level.disableManualCheckpointRespawn === true) return;
+    // Gate manual checkpoint respawn if disabled at level - automatic death respawn (from kill()) and the death animation (frozen) bypass this
+    if (isAutomatic !== true && app.level.disableManualCheckpointRespawn === true && this.isFrozen() == false) return;
 
     // Deterministic mode's impulse/pair-cache reset happens in Level.retryLevel() below, which this
     // always calls - a single canonical reset point for every restart path (R key, automatic

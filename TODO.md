@@ -1,6 +1,4 @@
 # Bugs
-- Physics changes in nondeterministic mode
-- Manual respawn should be enabled during death animation when manual respawn property set to false
 - Jump indicator doesn't hide in pause, finish, or settings menus
 - Level being loaded in level editor without theme crashes (might be same in level packs)
 - Possible bug with checkpoint position deterministic mode
