@@ -1,38 +1,12 @@
 # Bugs
-- Settings menu isn't consistent in main menu and level editor (tab missing in main menu)
-- Jump indicator changes visual size relative to play depending on screen size
-  - All UI
-- Pressing "e" acts as level reset in level editor instead of pause
-  - Reset and pause buttons functionality switched
-  - Reset doesn't reset player checkpoint property
-  - Sometimes resets player to 0,0 or to checkpoint instead of origin position
-- Zoom setting marked as invalid when zooming out in level editor
-- Search query in new level selector disappears
-- Opening settings then pressing "r" restarts the level and resumes the game
-- Jumping carrying over into restart should disable the automatic jump refresh at the start of levels/after respawns
-- Right click to rotate camera in editor deletes blocks
-- Checkpoints don't play sounds when disabled
-- Enabling debug mode doesn't immediately show hitboxes
-- Deterministic mode doesn't work on level ARGHHHH
-- Respawn timer doesn't reset when exiting level
 - ARGHHHHHH is an auto level
 - Splash park in main pack is by ember
 - Wavemachine optimized is modified by charlie
-- Settings button doesn't pause gameplay in level editor
-- Jump restored when respawning
 - Mimic old UI properly
   - Mimic bubble theme properly
-- Respawning temporarily sets camera to 0,0
-- Reset block doesn't stop camera rotation
-- Settings and pause menus don't pause auto respawn
-- esc on settings menu should exit settings menu
-- Jump is carried through automatic respawn
 - Move bounce snake to hard level pack
-- Player visual position not updated when short on ram/when lag
-  - Get rid of det-trace
 - Re-introduce checkpoint glitch
 - Timed spider made by Majesticcss
-- Default level pack value not shown in textbox
 
 # Level editor improvements
 - Organize level properties
@@ -58,6 +32,7 @@
 - Make jump indicator disable verification badge
 - Separate moving background and rotating camera
 - Change old backgrounds setting to background & default block recolour and apply to all levels
+- Clean thumbnails setting
 
 # QOL
 - Lines from teleport blocks to destinations

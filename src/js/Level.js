@@ -29,6 +29,7 @@ class Level extends Group {
     // Add to group and compute world matrix once (scene.matrixWorldAutoUpdate is off)
     this.add(object);
     object.updateMatrixWorld();
+    object.helper.visible = app.storage.getSettings().invalidatingSettings.hitboxes === true; // New blocks follow debug mode
     object.updateHelper();
   }
 
@@ -272,10 +273,7 @@ class Level extends Group {
   }
 
   resetLevel() {
-    // TEMPORARY determinism diagnostic - marks the start of a new attempt. Every restart path
-    // (R key, automatic kill-restart, initial level entry) funnels through resetScene() -> here,
-    // making this the single reliable "a new attempt just began" hook. See App.js's
-    // detSyncAttempt/detCaptureTick. Remove this line alongside that diagnostic.
+    // Reset counter read by tools/determinism-test to split recordings into attempts
     window.__detAttempt = (window.__detAttempt == null) ? 0 : window.__detAttempt + 1;
 
     // Gets called every time the level starts (including checkpoints)
@@ -301,7 +299,8 @@ class Level extends Group {
     // without Matter ever getting the chance to fire a real collisionEnd for that pair).
     app.collision.reconcileAfterReset();
 
-    app.player.jumpReady = true;
+    // A jump made just before this reset still launches the player, so don't also hand out a fresh one
+    if (app.player.jumpPending !== true) app.player.jumpReady = true;
   }
 
   retryLevel(keepCheckpoint = false, respawnToTemp = true) {
@@ -320,6 +319,7 @@ class Level extends Group {
       app.player.resetDeterministicPhysics();
     }
 
+    var jumpReady = app.player.jumpReady; // resetScene() refreshes the jump, which checkpoint respawns don't get
     app.resetScene();
     window.dispatchEvent(new CustomEvent('closePopup'));
 
@@ -332,11 +332,18 @@ class Level extends Group {
       // temp spawn override (if any) so "R" mid-playtest respects it too (see LevelEditor.applyTempSpawn).
       if (respawnToTemp && app.levelEditor) app.levelEditor.applyTempSpawn();
     }
-    else app.player.respawn(true);
+    else {
+      app.player.jumpReady = jumpReady;
+      app.player.respawn(true);
+    }
+
+    // resetScene() drew a frame at the level start - redraw at the real respawn point so it's never shown
+    app.updateRender({ delta: 0, alpha: 0 });
   }
 
   exitLevel() {
     app.timer.reset();
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     app.player.removeCheckpoint();
 
     // Check current state
@@ -397,6 +404,10 @@ class Level extends Group {
     this.traverse(function(obj) {
       if (obj.helper) obj.helper.visible = visible;
     });
+
+    // Hidden helpers aren't kept in place, so reposition them and redraw now (the loop doesn't render while paused)
+    this.updateHelpers();
+    app.graphics.render();
   }
 
   updateHelpers() {

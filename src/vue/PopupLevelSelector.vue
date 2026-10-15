@@ -129,7 +129,8 @@
   function selectPack(pack) {
     selectedPack.value = pack;
     if (filteredLevels.value[0]) selectedLevel.value = filteredLevels.value[0];
-    search.value = '';
+    // Keep the typed search query (it used to be cleared here, wiping it on pack clicks and on refocusing the search box)
+    // search.value = '';
     app.assets.audio.play('click');
   }
 

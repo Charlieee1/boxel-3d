@@ -10,6 +10,7 @@
   const i18n = useI18n({ useScope: 'global' });
   const credit = ref('');
   const isClosed = ref(true); // Popup animation state
+  const isSettingsOpen = ref(false); // Game keys are ignored while settings is open
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
   const record = ref();
@@ -22,6 +23,7 @@
     window.addEventListener('popupClosing', popupClosing);
     window.addEventListener('beforeSettingsOpened', settingsOpened);
     window.addEventListener('beforeSettingsClosed', settingsClosed);
+    window.addEventListener('settingsClosed', settingsFullyClosed);
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
@@ -35,6 +37,7 @@
     window.removeEventListener('popupClosing', popupClosing);
     window.removeEventListener('beforeSettingsOpened', settingsOpened);
     window.removeEventListener('beforeSettingsClosed', settingsClosed);
+    window.removeEventListener('settingsClosed', settingsFullyClosed);
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
@@ -75,11 +78,17 @@
   }
 
   function settingsOpened() {
+    isSettingsOpen.value = true;
     app.pauseLevel();
   }
   
   function settingsClosed() {
     app.resumeLevel();
+  }
+
+  // Cleared after the close finishes so the key that closed settings (Escape/E) isn't also handled here
+  function settingsFullyClosed() {
+    isSettingsOpen.value = false;
   }
 
   function pointerdown(e) {
@@ -91,6 +100,8 @@
   }
 
   function keydown(e) {
+    if (isSettingsOpen.value == true) return;
+
     // Make sure popup is closed
     if (isClosed.value == true || isClosing.value === true) {
       // Ignore events from inputs

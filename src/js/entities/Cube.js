@@ -60,7 +60,8 @@ class Cube extends Mesh {
   }
 
   update(delta, alpha) {
-    if (alpha) {
+    // alpha can be exactly 0 (ex: every frame under lag, when frame time is capped to one engine step) - still interpolate then
+    if (alpha != null) {
       // Interpolate position and rotation
       this.position.x = (this.body.positionPrev.x + (this.body.position.x - this.body.positionPrev.x) * alpha);
       this.position.y = -(this.body.positionPrev.y + (this.body.position.y - this.body.positionPrev.y) * alpha);
@@ -85,10 +86,12 @@ class Cube extends Mesh {
 
   updateHelper() {
     if (this.helper && this.helper.visible == true) {
-      this.helper.position.x = this.body.position.x;
-      this.helper.position.y = -this.body.position.y;
+      // While editing, follow the block's own transform so the hitbox tracks gizmo drags before the body syncs on release
+      var isEditing = typeof app !== 'undefined' && app.levelEditor != null && app.levelEditor.isEditorPaused();
+      this.helper.position.x = isEditing ? this.position.x : this.body.position.x;
+      this.helper.position.y = isEditing ? this.position.y : -this.body.position.y;
       this.helper.position.z = this.position.z;
-      this.helper.rotation.z = -this.body.anglePrev;
+      this.helper.rotation.z = isEditing ? this.rotation.z : -this.body.anglePrev;
       this.helper.scale.copy(this.scale).multiplyScalar(1);
       this.helper.updateMatrixWorld();
     }

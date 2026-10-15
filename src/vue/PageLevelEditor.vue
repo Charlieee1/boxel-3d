@@ -22,6 +22,8 @@
   const levelUITextValue = ref(app.level.levelUIText || '');
   const resetPropertiesPopupVisible = ref(false);
   const isClosed = ref(true); // Popup animation state
+  const isSettingsOpen = ref(false); // Editor/game keys are ignored while settings is open
+  let isPausedBySettings = false; // Settings paused a running playtest, so closing it resumes
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
   const textOverlay = ref();
@@ -284,6 +286,9 @@
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('beforeSettingsOpened', settingsOpened);
+    window.addEventListener('beforeSettingsClosed', settingsClosing);
+    window.addEventListener('settingsClosed', settingsClosed);
     window.addEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.addEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
@@ -306,6 +311,9 @@
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
+    window.removeEventListener('beforeSettingsOpened', settingsOpened);
+    window.removeEventListener('beforeSettingsClosed', settingsClosing);
+    window.removeEventListener('settingsClosed', settingsClosed);
     window.removeEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.removeEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
@@ -681,10 +689,29 @@
     }
   }
 
+  function settingsOpened() {
+    isSettingsOpen.value = true;
+
+    // Freeze a running playtest while settings is open, same as campaign
+    isPausedBySettings = app.play == true;
+    if (isPausedBySettings) app.pauseLevel();
+  }
+
+  function settingsClosing() {
+    if (isPausedBySettings) app.resumeLevel();
+    isPausedBySettings = false;
+  }
+
+  // Cleared after the close finishes so the key that closed settings (Escape/E) isn't also handled here
+  function settingsClosed() {
+    isSettingsOpen.value = false;
+  }
+
   function keydown(e) {
     // Track key state for editor transforms (Shift-duplicate) and putty lock.
     app.levelEditor.keys[e.code] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = true;
+    if (isSettingsOpen.value == true) return;
 
     // Ignore keyboard shortcuts when typing in an input field
     const targetTagName = e?.target?.tagName;

@@ -39,7 +39,7 @@
   function addEventListeners() {
     window.addEventListener('openSettings', openSettings);
 	  window.addEventListener('closeSettings', closeSettings);
-    window.addEventListener('keydown', keydown);
+    window.addEventListener('keydown', keydown, true); // Capture phase runs before every other key handler
     window.addEventListener('settingsImported', reloadSettings);
   }
   
@@ -47,7 +47,7 @@
   function removeEventListeners() {
     window.removeEventListener('openSettings', openSettings);
 	  window.removeEventListener('closeSettings', closeSettings);
-    window.removeEventListener('keydown', keydown);
+    window.removeEventListener('keydown', keydown, true);
     window.removeEventListener('settingsImported', reloadSettings);
   }
 
@@ -100,8 +100,9 @@
       if (e.target.tagName != 'INPUT' && e.target.tagName != 'TEXTAREA') {
         var exitKeys = ['Escape', 'KeyE'];
         if (exitKeys.indexOf(e.code) > -1) {
-          // Close popup
+          // Close popup, and stop the key reaching pages/popups underneath (ex: Escape pausing or exiting them)
           e.preventDefault();
+          e.stopImmediatePropagation();
           runLastInputCallback(e);
         }
       }

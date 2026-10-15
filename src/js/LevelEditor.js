@@ -122,6 +122,7 @@ class LevelEditor {
       if (this.isMultiselectTransform()) this.updateGroupTransform();
       // Vertex/end snapping overrides putty's own built-in grid snap (see mouseDown() and applyVertexSnapToPutty()).
       else if (this.snapMode !== 'normal' && app.selectedObject) this.applyVertexSnapToPutty();
+      if (app.selectedObject) app.selectedObject.updateHelper(); // Hitbox follows the drag in real time
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
     this.controlsPutty.addEventListener('hoveron', () => { this.puttyHovering = true; });
@@ -155,6 +156,7 @@ class LevelEditor {
       else if (this.snapMode !== 'normal' && this.selectedMode === 'translate' && app.selectedObject) this.applyVertexSnapToSelection();
       // Same, for a scale drag - corrects scale (not position) since scale is symmetric about the object center.
       else if (this.snapMode !== 'normal' && this.selectedMode === 'scale' && app.selectedObject) this.applyVertexSnapToScale(app.selectedObject);
+      if (app.selectedObject) app.selectedObject.updateHelper(); // Hitbox follows the drag in real time
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
 
@@ -868,6 +870,7 @@ class LevelEditor {
       scale: { x: box.boxX, y: box.boxY, z: box.boxZ }
     });
     app.level.addObject(block);
+    block.helper.visible = false; // Temporary scaffolding, not a real block - no debug hitbox
     action.controlBlock = block;
 
     // Keep the control block translucent and cyan through normal selection (baseSelect would otherwise recolor it white); doesn't affect clicking.
@@ -2099,6 +2102,7 @@ class LevelEditor {
     app.level.clearLevel();
     app.levelHistory.clear();
     this.savedHistoryIndex = null; // next editor session starts "unsaved"
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
     this.controlsOrbit.enabled = false;

@@ -124,6 +124,9 @@ class Player extends Cube {
   }
 
   jump() {
+    // No jumping while dead, so no jump force or buffered jump carries through the respawn
+    if (this.isFrozen() == true) return;
+
     if (this.mode == 'jump' || this.mode == 'control') {
       if (this.hasJump()) {
         this.jumpReady = false;
@@ -155,6 +158,7 @@ class Player extends Cube {
         Body.setVelocity(this.body, velocity);
         Body.setAngularVelocity(this.body, angularVelocity);
         Body.applyForce(this.body, this.body.position, force);
+        this.jumpPending = true; // Force is applied on the next engine tick, and survives a reset in between
 
         // Play jump sound
         app.assets.audio.play('pop2');
@@ -287,7 +291,10 @@ class Player extends Cube {
       var isDeterministic = settings.invalidatingSettings.deterministic === true;
       // Respawn in 1 second (bypasses manual respawn gate, this is automatic); deterministic mode counts 60 ticks
       if (isDeterministic) this.killTicks = 60;
-      else this.killTimeout = setTimeout(function() { this.restart(true); }.bind(this), 1000);
+      else {
+        this.killTimeRemaining = 1000;
+        this.resumeRestart();
+      }
       var particleColor = settings.general.deathParticleColour || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
@@ -335,7 +342,27 @@ class Player extends Cube {
   cancelRestart() {
     // Clear potential timeout/tick countdown from player kill
     clearTimeout(this.killTimeout);
+    this.killTimeout = null;
+    this.killTimeRemaining = 0;
     this.killTicks = 0;
+  }
+
+  // Non-deterministic death respawn is a wall-clock timeout, so it's paused/resumed with the game (ticks only count while playing)
+  pauseRestart() {
+    if (this.killTimeout == null) return;
+    clearTimeout(this.killTimeout);
+    this.killTimeout = null;
+    this.killTimeRemaining = Math.max(1, this.killTimeRemaining - (Date.now() - this.killTimeoutStart));
+  }
+
+  resumeRestart() {
+    if (this.killTimeout != null || !(this.killTimeRemaining > 0)) return;
+    this.killTimeoutStart = Date.now();
+    this.killTimeout = setTimeout(function() {
+      this.killTimeout = null;
+      this.killTimeRemaining = 0;
+      this.restart(true);
+    }.bind(this), this.killTimeRemaining);
   }
 
   saveCheckpoint(position) {
