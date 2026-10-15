@@ -2203,6 +2203,9 @@
   z-index: 100;
 
   &.active { opacity: 1; }
+
+  // Hidden while any menu is open: popups (pause, finish, tips, prompts), settings and fancy popups
+  body:has(.popup:not([style*="display: none"]), .fancy-popup) & { opacity: 0; }
 }
 
 .rendererCSS {

@@ -1,6 +1,4 @@
 # Bugs
-- Jump indicator doesn't hide in pause, finish, or settings menus
-- Level being loaded in level editor without theme crashes (might be same in level packs)
 - Possible bug with checkpoint position deterministic mode
 - Textbox text not modifiable
 - Settings menu isn't consistent in main menu and level editor (tab missing in main menu)

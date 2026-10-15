@@ -365,11 +365,8 @@ class App {
 
   updateJumpIndicator() {
     var settings = this.storage.getSettings();
-    // Only relevant while actually in a level: playing (campaign/editor playtest), or paused
-    // via campaign's own pause menu (state stays 'campaign' while paused). Editing in the level
-    // editor (paused, not playtesting) and anywhere outside a level (menus, level-manager) hide it.
-    var inLevel = this.play === true || this.state === 'campaign';
-    if (settings.invalidatingSettings.jumpIndicator !== true || inLevel === false) {
+    // Only shown during live gameplay (open menus also hide it via CSS, see #jump-indicator in Main.scss)
+    if (settings.invalidatingSettings.jumpIndicator !== true || this.play !== true) {
       this.jumpIndicator.classList.remove('active');
       return;
     }
