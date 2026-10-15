@@ -933,7 +933,16 @@
       "Fixed bug when level had no set theme",
       "Changed internal settings structure",
       "Moved thumbnail storage to IndexedDB",
-      "Fixed zoom setting bugs"
+      "Fixed zoom setting bugs",
+      "Changed default settings",
+      "Fixed camera bugs in level editor",
+      "Fixed undo/redo",
+      "Fixed multiselect box select",
+      "Added reset block property to reset camera rotation animation",
+      "Fixed jump indicator",
+      "Enabled manual respawn during death animation always",
+      "Fixed level editor popups",
+      "Fixed bugs"
     ]
   }
 ]
