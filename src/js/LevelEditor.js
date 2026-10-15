@@ -2064,12 +2064,15 @@ class LevelEditor {
   }
 
   undo() {
+    if (this.exclusiveAction != null) return; // Reloading the level would leave the active action holding stale objects
     this.detachControls();
     app.levelHistory.undo();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
   redo() {
+    if (this.exclusiveAction != null) return; // Reloading the level would leave the active action holding stale objects
+    this.detachControls();
     app.levelHistory.redo();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }

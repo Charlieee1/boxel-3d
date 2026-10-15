@@ -1,5 +1,4 @@
 # Bugs
-- Undo/redo doesn't work
 - Multiselect only selects centres of blocks
 - Guide is very unclear
 - Reset button doesn't pause game
