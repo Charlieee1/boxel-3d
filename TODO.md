@@ -1,5 +1,4 @@
 # Bugs
-- Power block doesn't keep jump indicator on
 - Physics changes in nondeterministic mode
 - Manual respawn should be enabled during death animation when manual respawn property set to false
 - Jump indicator doesn't hide in pause, finish, or settings menus

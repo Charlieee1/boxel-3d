@@ -2193,8 +2193,8 @@
 /* Jump-ready indicator dot (appended directly to document.body by App.js) */
 #jump-indicator {
   position: fixed;
-  width: 0.75em;
-  height: 0.75em;
+  width: 1.1vh; // Scales with screen height like the game view (~12px at 1080p)
+  height: 1.1vh;
   background-color: #00ff00;
   border-radius: 50%;
   opacity: 0;

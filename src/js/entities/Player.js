@@ -118,9 +118,14 @@ class Player extends Cube {
     }
   }
 
+  // A jump is available when grounded or in unlimited jump mode (Power block)
+  hasJump() {
+    return this.jumpReady == true || this.jumpMode == 'unlimited';
+  }
+
   jump() {
     if (this.mode == 'jump' || this.mode == 'control') {
-      if (this.jumpReady == true || this.jumpMode == 'unlimited') {
+      if (this.hasJump()) {
         this.jumpReady = false;
   
         // Define jump conditions

@@ -374,11 +374,11 @@ class App {
       return;
     }
 
-    // Offset to the right of screen center, vertically aligned with the player
-    this.jumpIndicator.style.left = (this.screenWidth / 2 + 40) + 'px';
+    // Offset to the right of screen center by a fraction of screen height (~40px at 1080p), vertically aligned with the player
+    this.jumpIndicator.style.left = (this.screenWidth / 2 + this.screenHeight * 0.037) + 'px';
     this.jumpIndicator.style.top = (this.screenHeight / 2) + 'px';
 
-    if (this.player.jumpReady === true && this.player.visible === true) this.jumpIndicator.classList.add('active');
+    if (this.player.hasJump() && this.player.visible === true) this.jumpIndicator.classList.add('active');
     else this.jumpIndicator.classList.remove('active');
   }
 
