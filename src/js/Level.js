@@ -261,7 +261,10 @@ class Level extends Group {
       var settings = app.storage.getSettings();
       var objectData = levelData.children[i];
       var object = this.entityFactory.createObject(objectData.class);
-      if (objectData.class == 'player') object = app.player;
+      if (objectData.class == 'player') {
+        object = app.player;
+        if (settings.invalidatingSettings.deterministic === true) object.restoreConstructedBody();
+      }
       object.helper.visible = settings.invalidatingSettings.hitboxes;
       this.setObjectProperties(object, objectData);
       this.addObject(object);

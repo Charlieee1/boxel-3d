@@ -173,6 +173,10 @@ class App {
       // one since the last tick, see detSyncAttempt
       this.detSyncAttempt();
 
+      // Deterministic mode: jump buffer counts physics ticks instead of render-frame wall-clock time
+      var isDeterministic = this.storage.getSettings().invalidatingSettings.deterministic === true;
+      if (isDeterministic) this.player.updateJumpBuffer(delay);
+
       // Update player object
       this.player.updateControls();
       this.player.updateForce();
@@ -181,6 +185,12 @@ class App {
 
       // Update world engine
       Engine.update(this.engine, delay);
+
+      // Deterministic mode: fall-out kills and death respawn run on physics ticks, not render frames/setTimeout
+      if (isDeterministic) {
+        this.updateOutOfBounds();
+        this.player.updateKillTimer();
+      }
 
       // TEMPORARY determinism diagnostic - per-tick body state for the current attempt
       this.detCaptureTick();
@@ -317,6 +327,16 @@ class App {
         child.updateMatrixWorld();
       }
       index--; // Update iterator
+    }
+  }
+
+  // Deterministic-mode counterpart of Cube.update's out-of-bounds check, using the previous engine position
+  updateOutOfBounds() {
+    var index = this.level.children.length - 1;
+    while (index >= 0) {
+      var child = this.level.children[index];
+      if (child.body != null && child.isFrozen() == false && child.isStatic() == false) child.checkOutOfBounds(-child.body.positionPrev.y);
+      index--;
     }
   }
 

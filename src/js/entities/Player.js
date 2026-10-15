@@ -34,6 +34,44 @@ class Player extends Cube {
     // Add an invisible plane to player for rope raycaster mechanics
     this.plane = new Mesh(new PlaneGeometry(1000000, 1000000), new MeshPhongMaterial({ visible: false, side: DoubleSide }));
     this.add(this.plane);
+
+    // Constructor-time physics state, restored per level in deterministic mode (see restoreConstructedBody)
+    this.constructedBody = this.body.parts.map(function(part) { return this.copyPartPhysics(part); }.bind(this));
+  }
+
+  // Plain copy of a Matter part's numeric/vector physics fields
+  copyPartPhysics(part) {
+    var copy = {};
+    for (var key in part) {
+      var value = part[key];
+      if (typeof value === 'number' || typeof value === 'boolean') copy[key] = value;
+      else if (key === 'vertices' || key === 'axes') copy[key] = value.map(function(v) { return { x: v.x, y: v.y }; });
+      else if (key === 'bounds') copy[key] = { min: { x: value.min.x, y: value.min.y }, max: { x: value.max.x, y: value.max.y } };
+      else if (['position', 'positionPrev', 'velocity', 'force', 'positionImpulse', 'constraintImpulse'].indexOf(key) >= 0) copy[key] = Object.assign({}, value);
+    }
+    return copy;
+  }
+
+  // Deterministic mode: the player is reused across levels, so its geometry would otherwise carry the previous
+  // level's scaling history (and a stale resyncBodyGeometry template) - reset it to the constructor-time state
+  restoreConstructedBody() {
+    this.body.parts.forEach(function(part, i) {
+      var saved = this.constructedBody[i];
+      for (var key in saved) {
+        var value = saved[key];
+        if (key === 'vertices' || key === 'axes') {
+          part[key].length = value.length;
+          for (var j = 0; j < value.length; j++) { part[key][j] = part[key][j] || {}; part[key][j].x = value[j].x; part[key][j].y = value[j].y; }
+        }
+        else if (key === 'bounds') { part.bounds.min.x = value.min.x; part.bounds.min.y = value.min.y; part.bounds.max.x = value.max.x; part.bounds.max.y = value.max.y; }
+        else if (typeof value === 'object') Object.assign(part[key], value);
+        else part[key] = value;
+      }
+    }.bind(this));
+    this.position.set(0, 0, 0);
+    this.rotation.set(0, 0, 0);
+    this.scale.set(16, 16, 16);
+    this.geometryTemplate = null;
   }
 
   setColors() {
@@ -45,8 +83,9 @@ class Player extends Cube {
   }
 
   update(delta, alpha) {
-    // Calculate input buffer
-    if (this.jumpBuffer > 0) {
+    // Calculate input buffer (deterministic mode does this per physics tick in updateJumpBuffer)
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    if (this.jumpBuffer > 0 && !isDeterministic) {
       this.jumpBuffer -= delta; // ms
 
       // Automatically jump if buffer is set
@@ -58,6 +97,25 @@ class Player extends Cube {
 
     // Update cube properties
     super.update(delta, alpha);
+  }
+
+  // Deterministic-mode jump buffer: counted down by the fixed physics delay, fired before the tick
+  updateJumpBuffer(delay) {
+    if (this.jumpBuffer > 0) {
+      this.jumpBuffer -= delay;
+      if (this.jumpReady == true) {
+        this.jumpBuffer = 0;
+        this.jump();
+      }
+    }
+  }
+
+  // Deterministic-mode death respawn: counts physics ticks instead of a wall-clock setTimeout
+  updateKillTimer() {
+    if (this.killTicks > 0) {
+      this.killTicks--;
+      if (this.killTicks == 0) this.restart(true);
+    }
   }
 
   jump() {
@@ -220,8 +278,11 @@ class Player extends Cube {
     if (this.isFrozen() == false) {
       this.freeze(true);
       this.visible = false;
-      this.killTimeout = setTimeout(function() { this.restart(true); }.bind(this), 1000); // Respawn in 1 second (bypasses manual respawn gate, this is automatic)
       var settings = app.storage.getSettings();
+      var isDeterministic = settings.invalidatingSettings.deterministic === true;
+      // Respawn in 1 second (bypasses manual respawn gate, this is automatic); deterministic mode counts 60 ticks
+      if (isDeterministic) this.killTicks = 60;
+      else this.killTimeout = setTimeout(function() { this.restart(true); }.bind(this), 1000);
       var particleColor = settings.general.deathParticleColour || this.color; // Fallback to player color
       var rows = 4, cols = 4, layers = 4;
       var scale = { x: this.scale.x / cols, y: this.scale.y / rows, z: this.scale.z / layers }
@@ -231,7 +292,6 @@ class Player extends Cube {
       // physics bodies spawn by a wall-clock-timing-dependent amount; non-deterministic mode keeps
       // the original (interpolated) source so existing runs/records made against that behavior stay
       // comparable.
-      var isDeterministic = settings.invalidatingSettings.deterministic === true;
       var originX = isDeterministic ? this.body.position.x : this.position.x;
       var originY = isDeterministic ? -this.body.position.y : this.position.y;
 
@@ -268,8 +328,9 @@ class Player extends Cube {
   }
 
   cancelRestart() {
-    // Clear potential timeout from player kill
+    // Clear potential timeout/tick countdown from player kill
     clearTimeout(this.killTimeout);
+    this.killTicks = 0;
   }
 
   saveCheckpoint(position) {

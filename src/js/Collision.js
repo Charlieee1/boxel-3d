@@ -67,7 +67,9 @@ class Collision {
               }
               else if (objectA.body.class == 'checkpoint') {
                 if (objectB.body.class ==  'player') {
-                  app.player.saveCheckpoint(objectA.position);
+                  // Deterministic mode: true physics position, objectA.position is render-interpolated for moving checkpoints
+                  var checkpointPosition = settings.invalidatingSettings.deterministic === true ? { x: objectA.body.position.x, y: -objectA.body.position.y, z: objectA.position.z } : objectA.position;
+                  app.player.saveCheckpoint(checkpointPosition);
                   app.assets.audio.play('success');
                 }
               }

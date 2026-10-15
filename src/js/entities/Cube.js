@@ -67,14 +67,20 @@ class Cube extends Mesh {
       this.rotation.z = -(this.body.anglePrev + (this.body.angle - this.body.anglePrev) * alpha)
     }
 
-    if (this.position.y < -1000) {
+    // Deterministic mode runs this per physics tick from App.updateOutOfBounds instead
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    if (!isDeterministic) this.checkOutOfBounds(this.position.y);
+
+    // Update helper
+    this.updateHelper();
+  }
+
+  checkOutOfBounds(y) {
+    if (y < -1000) {
       if (this.getClass() == 'player' && this.isStatic() == false) this.kill();
       // Freeze + hide instead of removing, so resetLevel() can still find and revive it.
       else if (this.visible) this.hide(true);
     }
-
-    // Update helper
-    this.updateHelper();
   }
 
   updateHelper() {

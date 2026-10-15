@@ -48,6 +48,10 @@
 - Jump is carried through automatic respawn
 - Move bounce snake to hard level pack
 - Player visual position not updated when short on ram/when lag
+  - Get rid of det-trace
+- Re-introduce checkpoint glitch
+- Timed spider made by Majesticcss
+- Default level pack value not shown in textbox
 
 # Level editor improvements
 - Organize level properties
@@ -59,6 +63,7 @@
 - Level editor camera while gameplay is running (player death does not restart level)
 - Level editor guide
 - Proper intangible objects
+- Automatically reset (restart) level when making modifications
 
 # Settings
 - External resources
@@ -71,6 +76,7 @@
 - Separate moving background from rotating camera
 - Make jump indicator disable verification badge
 - Separate moving background and rotating camera
+- Change old backgrounds setting to background & default block recolour and apply to all levels
 
 # QOL
 - Lines from teleport blocks to destinations
