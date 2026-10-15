@@ -660,6 +660,14 @@ class App {
   updateCameraZoom(zoom) {
     // Skip camera update if level has a locked zoom
     if (this.level.zoom !== undefined) return;
+
+    // While editing, only move the camera if it's in its reset state, otherwise just update where it resets to
+    var isEditing = this.state == 'level-editor' && this.play == false;
+    if (isEditing && this.levelEditor.isCameraReset() == false) {
+      this.camera.position.zDefault = zoom;
+      this.levelEditor.controlsOrbit.position0.z = zoom;
+      return;
+    }
     this.camera.position.zDefault = zoom;
     this.camera.position.z = zoom;
     this.saveOrbitState();
@@ -670,6 +678,7 @@ class App {
     app.play = false;
     app.resetScene();
     app.level.clearLevel();
+    app.updateCameraZoom(app.storage.getSettings().invalidatingSettings.zoom); // Don't carry the level's zoom over
     app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
     window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
@@ -738,7 +747,7 @@ class App {
       var description = this.level.getDescriptionByTitle(title)
       var author = this.level.getAuthorByTitle(title);
       var theme = this.level.getTheme(options.json.theme);
-      var zoom = options.json.zoom || app.camera.position.zDefault;
+      var zoom = options.json.zoom || storageSettings.invalidatingSettings.zoom;
       if (theme == null) theme = this.level.getPackTheme(title);
       if (theme == null) theme = app.level.getTheme('classic');
       // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
@@ -825,6 +834,8 @@ class App {
 
   isZoomValid() {
     var zoom = app.camera.position.z;
+    // Editor camera zooms freely while editing, so check the zoom playtesting will use
+    if (app.state == 'level-editor' && app.play == false) zoom = app.level.zoom || app.camera.position.zDefault;
     var zoomIsValid = app.level.zoom ? (zoom == app.level.zoom) : (zoom == 180);
     return zoomIsValid;
   }

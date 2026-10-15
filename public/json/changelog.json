@@ -931,8 +931,9 @@
     "revisions": [
       "Fixed deterministic mode",
       "Fixed bug when level had no set theme",
-      "Fixed settings storage organization",
-      "Moved thumbnail storage to IndexedDB"
+      "Changed internal settings structure",
+      "Moved thumbnail storage to IndexedDB",
+      "Fixed zoom setting bugs"
     ]
   }
 ]

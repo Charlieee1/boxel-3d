@@ -2136,6 +2136,16 @@ class LevelEditor {
     this.updateRender();
   }
 
+  // Reset camera state: zoomed out to the zoom setting and looking straight at the player
+  isCameraReset() {
+    var camera = app.camera.position;
+    var target = this.controlsOrbit.target;
+    var player = app.player.position;
+    var epsilon = 0.001;
+    return Math.abs(camera.x - player.x) < epsilon && Math.abs(camera.y - player.y) < epsilon && Math.abs(camera.z - camera.zDefault) < epsilon &&
+      Math.abs(target.x - player.x) < epsilon && Math.abs(target.y - player.y) < epsilon;
+  }
+
   // "]" popup: type an exact camera X or Y directly.
   setCameraX(value) {
     app.camera.position.x = parseFloat(value) || 0;

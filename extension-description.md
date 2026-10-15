@@ -12,6 +12,9 @@ Changelog:
 v2.9.3-m1.2.3
 Fixed deterministic mode
 Fixed bug when level had no set theme
+Changed internal settings structure
+Moved thumbnail storage to IndexedDB
+Fixed zoom setting bugs
 
 v2.9.3-m1.2.2
 Fixed deterministic mode

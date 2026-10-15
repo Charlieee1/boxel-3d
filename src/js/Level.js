@@ -345,6 +345,7 @@ class Level extends Group {
       var progress = parseInt(settings.selectedLevel)
       progress++; // Increase level progress
       settings.selectedLevel = progress;
+      app.level.clearLevel(); // Clear the level's zoom (and lock) before settings re-apply the camera zoom
       app.updateSettings(settings);
       window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
     }
