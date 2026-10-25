@@ -98,6 +98,15 @@
         </label>
       </div>
       <div class="option">
+        <label for="deterministicMath">{{ i18n.t('settings.general.deterministic_math') }}</label>
+      </div>
+      <div class="option">
+        <select id="deterministicMath" data-setting="general.deterministicMath" :value="settings.general.deterministicMath" @change="$emit('updateSettings', $event)">
+          <option value="chrome">{{ i18n.t('settings.general.deterministic_math_chrome') }}</option>
+          <option value="firefox">{{ i18n.t('settings.general.deterministic_math_firefox') }}</option>
+        </select>
+      </div>
+      <div class="option">
         <input type="checkbox" id="saveInvalidRuns" data-setting="invalidatingSettings.saveInvalidRuns" :checked="settings.invalidatingSettings.saveInvalidRuns !== false" @change="$emit('updateSettings', $event)">
         <label for="saveInvalidRuns">{{ i18n.t('settings.general.save_invalid_runs') }}</label>
       </div>

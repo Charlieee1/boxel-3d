@@ -7,9 +7,15 @@
 - Move bounce snake to hard level pack
 - Re-introduce checkpoint glitch
 - Timed spider made by Majesticcss
+- Level editor settings aren't available in all settings menus
+- FPS/pos indicator setting not saved across sessions
+- Duplicate level names in carousel
+- Can return to main menu when popup is open in level editor
+- Pooshy Sqooshy is a puzzle level
 
 # Level editor improvements
-- Organize level properties
+- Organize level properties in level file
+- Add author level property
 - Saved object groups
 - Allow combinations of modes and easy switching
 - Plugins
@@ -19,6 +25,8 @@
 - Level editor guide
 - Proper intangible objects
 - Automatically reset (restart) level when making modifications
+- Drawing mode (like thin build but each block is placed on each (every 5th?) mouse movement)
+- Better platformer friction
 
 # Settings
 - External resources
@@ -42,6 +50,7 @@
 - Change max zoom in editor to 5k
 - Pre-load next level
 - Make long level credits scroll
+- Random level button
 
 # Extra features
 - Gravity preservation glitch working for campaign levels

@@ -291,6 +291,7 @@ class StorageManager {
       },
       general: {
         deathParticleColour: '#dc265a',
+        deterministicMath: 'firefox',
         disableTextboxes: false,
         reverseControls: true,
         skin: { id: 466, title: "Smile", url: "./png/smile.png" }

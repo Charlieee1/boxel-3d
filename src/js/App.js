@@ -16,6 +16,7 @@ import { Mouse } from './Mouse.js';
 import { LevelEditor } from './LevelEditor.js';
 import { Multiplayer } from './Multiplayer.js';
 import { Network } from './Network.js';
+import { setDeterministicMath } from './math/DeterministicMath.js';
 
 class App {
   constructor() {
@@ -29,6 +30,7 @@ class App {
     this.state = 'home';
     this.animation = new Animation();
     this.storage = new StorageManager();
+    this.updateMath(this.storage.getSettings()); // Before any physics body is built
     this.collision = new Collision();
     this.player = new Player({ x: 0, y: 0, z: 0 });
     this.play = false;
@@ -334,6 +336,7 @@ class App {
     this.player.setInputBuffer(settings.invalidatingSettings.inputBuffer);
     this.updateCameraMotion(settings.graphics.cameraRotation, settings.graphics.backgroundMotion);
     this.updateCameraZoom(settings.invalidatingSettings.zoom);
+    this.updateMath(settings);
     this.applyThemeStyles(settings);
     window.dispatchEvent(new CustomEvent('updateStatsVisibility'));
     window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.graphics.scale }));
@@ -592,6 +595,12 @@ class App {
     this.camera.position.z = zoom;
     this.saveOrbitState();
     this.graphics.render();
+  }
+
+  updateMath(settings) {
+    // Deterministic mode runs on the selected engine's exact Math results, otherwise the browser's own
+    var isDeterministic = settings.invalidatingSettings.deterministic === true;
+    setDeterministicMath(isDeterministic ? settings.general.deterministicMath : null);
   }
 
   exitCampaign() {
