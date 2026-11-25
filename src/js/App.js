@@ -313,8 +313,10 @@ class App {
     this.storage.fillMissingSettings(settings, storageSettings);
 
     // Each of the 3 preset dropdowns independently re-applies only its own group's defaults
+    var isUISwitchInLevel = false;
     if (settings.theme.preset != storageSettings.theme.preset) {
       Object.assign(settings.theme, this.getMainThemeDefaults(settings.theme.preset));
+      isUISwitchInLevel = this.state == 'campaign';
     }
     if (settings.theme.editorPreset != storageSettings.theme.editorPreset) {
       Object.assign(settings.theme, this.getEditorThemeDefaults(settings.theme.editorPreset));
@@ -340,6 +342,12 @@ class App {
     this.applyThemeStyles(settings);
     window.dispatchEvent(new CustomEvent('updateStatsVisibility'));
     window.dispatchEvent(new CustomEvent('updateScale', { detail: settings.graphics.scale }));
+
+    // Checkpoint glitch: switching UI mid-level hard exits to the main menu but keeps the checkpoint (like vanilla)
+    if (isUISwitchInLevel) {
+      window.dispatchEvent(new CustomEvent('closeSettings')); // Closing resumes the level, so exit afterwards
+      this.exitCampaign(true, 'home');
+    }
     return true;
   }
 
@@ -538,9 +546,15 @@ class App {
     // Animate camera
     if (angle != null && app.cameraRotation == true) {
       angle *= -1;
-      if (angle < 0) app.camera.rotation.z = (app.camera.rotation.z - (Math.PI * 2)) % (Math.PI * 2);
       scale = (Math.abs((angle + Math.PI) % (Math.PI)) / (Math.PI / 2)) + 1; // 0deg = 1, 90deg = 2
-      app.cameraRotationTween = app.animation.tween({ object: app.camera.rotation, to: { z: angle }, duration: 250 }).start();
+
+      // Turn the short way (at most 180deg) from the current rotation
+      var turn = Math.PI * 2;
+      var from = app.camera.rotation.z % turn;
+      var delta = (((angle - from) % turn) + turn * 1.5) % turn - Math.PI;
+      if (app.cameraRotationTween) app.cameraRotationTween.stop();
+      app.camera.rotation.z = from;
+      app.cameraRotationTween = app.animation.tween({ object: app.camera.rotation, to: { z: from + delta }, duration: 250 }).start();
       app.background.animateScale(scale);
     }
     else {
@@ -603,15 +617,15 @@ class App {
     setDeterministicMath(isDeterministic ? settings.general.deterministicMath : null);
   }
 
-  exitCampaign() {
+  exitCampaign(keepCheckpoint = false, page = 'level-picker') {
     app.play = false;
     app.resetScene();
     app.level.clearLevel();
     app.updateCameraZoom(app.storage.getSettings().invalidatingSettings.zoom); // Don't carry the level's zoom over
     app.player.cancelRestart(); // A pending death respawn must not fire after leaving
-    app.player.removeCheckpoint();
+    if (keepCheckpoint == false) app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
-    window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
+    window.dispatchEvent(new CustomEvent('setPage', { detail: page }));
     window.dispatchEvent(new CustomEvent('closePopup'));
   }
 

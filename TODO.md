@@ -1,17 +1,11 @@
 # Bugs
-- ARGHHHHHH is an auto level
-- Splash park in main pack is by ember
-- Wavemachine optimized is modified by charlie
 - Mimic old UI properly
   - Mimic bubble theme properly
-- Move bounce snake to hard level pack
-- Re-introduce checkpoint glitch
-- Timed spider made by Majesticcss
 - Level editor settings aren't available in all settings menus
 - FPS/pos indicator setting not saved across sessions
 - Duplicate level names in carousel
 - Can return to main menu when popup is open in level editor
-- Pooshy Sqooshy is a puzzle level
+- Up arrow key scrolling up on multiplayer chat
 
 # Level editor improvements
 - Organize level properties in level file
@@ -51,6 +45,9 @@
 - Pre-load next level
 - Make long level credits scroll
 - Random level button
+- Optimize restart/respawn for lag
+- Say which level will be deleted in level editor popup
+- Heavy optimizations
 
 # Extra features
 - Gravity preservation glitch working for campaign levels
