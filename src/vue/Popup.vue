@@ -11,6 +11,7 @@
   var title = ref('');
   var text = ref('');
   var description = ref('');
+  var popupClass = ref(''); // Optional class from the event detail, for per-popup styling (ex: pause)
   var inputs = ref([]);
   var isOpen = ref(false);
 
@@ -33,6 +34,8 @@
 
     // Assign values from custom event detail (always reassigned so a previous popup's text never lingers)
     if (e.detail) {
+      popupClass.value = e.detail.class || '';
+
       // Check title i18n
       if (i18n.te(e.detail.title, i18n.fallbackLocale.value)) title.value = i18n.t(e.detail.title);
       else title.value = e.detail.title;
@@ -138,7 +141,7 @@
 
 <template>
   <Transition name="fade-bubble-popup">
-    <div class="popup" v-if="isOpen == true">
+    <div class="popup" :class="popupClass" v-if="isOpen == true">
       <div class="background" @click="runLastInputCallback"></div>
       <div class="container">
         <div class="content">

@@ -13,7 +13,6 @@
 
   // Conditionally render components
   var page = ref('home');
-  var fontSize = ref();
 
   function addEventListeners() {
     window.addEventListener('setPage', setPageFromEvent);
@@ -34,11 +33,11 @@
     app.state = name;
   }
 
+  // Sets the shared UI em base (--ui-font-size, Main.scss), so overlays outside this element scale with the UI too
   function updateScale(e) {
-    fontSize.value = null;
-    if (e.detail < 1 || e.detail > 1) {
-      fontSize.value = (e.detail * 4) + 'vh';
-    }
+    var root = document.documentElement.style;
+    if (e.detail < 1 || e.detail > 1) root.setProperty('--ui-font-size', (e.detail * 4) + 'vh');
+    else root.removeProperty('--ui-font-size');
   }
 
   // Run function after being mounted (visible)
@@ -60,7 +59,7 @@
 </script>
 
 <template>
-  <div class="ui-bubble" :style="{ fontSize }">
+  <div class="ui-bubble">
     <PageHome v-if="page == 'home'" @set-page="setPage" />
     <PageSkins v-if="page == 'skins'" @set-page="setPage" />
     <PageLevelPicker v-if="page == 'level-picker'" @set-page="setPage" />

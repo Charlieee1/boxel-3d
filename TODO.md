@@ -1,6 +1,4 @@
 # Bugs
-- Mimic old UI properly
-  - Mimic bubble theme properly
 
 # Level editor improvements
 - Organize level properties in level file
@@ -16,6 +14,7 @@
 - Automatically reset (restart) level when making modifications
 - Drawing mode (like thin build but each block is placed on each (every 5th?) mouse movement)
 - Better platformer friction
+- Allow cancelling exiting editor
 
 # Settings
 - Move level editor settings to own tab

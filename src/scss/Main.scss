@@ -1,6 +1,11 @@
+// UI em base, shared with overlays outside .ui-bubble (ex: jump indicator), the UI scale setting overrides it in Main.vue
+:root {
+  --ui-font-size: clamp(16px, 4vh, 32px);
+}
+
 .ui-bubble {
   font-family: 'Comfortaa-Bold';
-  font-size: clamp(16px, 4vh, 32px);
+  font-size: var(--ui-font-size);
   width: 100%;
   height: 100%;
 
@@ -110,7 +115,7 @@
 
       .button {
         background-color: rgba(#000000, 0.25);
-        border-radius: var(--theme-corner-radius, 0.75em);
+        border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
         width: 2.5em;
         height: 2.5em;
         color: #ffffff;
@@ -147,7 +152,7 @@
 
       .score {
         background-color: rgba(#000000, 0.25);
-        border-radius: var(--theme-corner-radius, 0.75em);
+        border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
         pointer-events: all;
         color: #ffffff;
         cursor: pointer;
@@ -161,7 +166,7 @@
 
         .current {
           background-color: var(--theme-accent-color, #EB2B6D);
-          border-radius: var(--theme-corner-radius, 0.75em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
           box-shadow: 0em 0.25em 0em rgba(#000000, 0.25);
           display: flex;
           align-items: center;
@@ -282,7 +287,7 @@
             }
 
             img, .svg {
-              border-radius: var(--theme-corner-radius, 0.75em);
+              border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
               box-shadow: 0em 0.25em 0em rgba(#000000, 0.25);
               display: block;
               object-fit: cover;
@@ -400,7 +405,7 @@
       .button {
         align-items: center;
         background-color: rgba(#000000, 0.25);
-        border-radius: var(--theme-corner-radius, 0.75em);
+        border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
         color: #ffffff;
         cursor: pointer;
         display: flex;
@@ -425,7 +430,7 @@
         .material-symbols-rounded {
           background-color: var(--theme-option-accent-color, #4CA9FF);
           box-shadow: 0em 0.125em 0em rgba(#000000, 0.25);
-          border-radius: var(--theme-corner-radius, 0.5em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
           width: 1.5em;
           height: 1.5em;
           display: flex;
@@ -534,8 +539,8 @@
 
         .tab {
           background-color: var(--theme-accent-color, #eb2b6d);
-          border-top-left-radius: var(--theme-corner-radius, 0.75em);
-          border-bottom-left-radius: var(--theme-corner-radius, 0.75em);
+          border-top-left-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
+          border-bottom-left-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
           box-shadow: 0 0.25em 0 rgba(#000000, 0.15);
           border-left: 0.25em solid transparent;
           border-right: 0.25em solid rgba(#000000, 0.15);
@@ -571,7 +576,7 @@
 
       .content {
         background-color: var(--theme-bg-color-2, #FF8A4C);
-        border-radius: var(--theme-corner-radius, 0.75em);
+        border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
         box-shadow: 0em 0.25em 0em rgba(#000000, 0.15);
         flex-grow: 1;
         padding: 2.5em 2em;
@@ -653,7 +658,7 @@
           input[type="text"] {
             background-color: var(--theme-accent-color, #EB2B6D);
             border: none;
-            border-radius: var(--theme-corner-radius, 0.5em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
             box-shadow: inset 0em 0.25em 0em rgba(#000000, 0.15);
             box-sizing: border-box;
             color: #ffffff;
@@ -735,7 +740,7 @@
 
             .material-symbols-rounded {
               color: var(--theme-option-accent-color-2, #FFC24C);
-              font-size: var(--theme-icon-size, 1.5em);
+              font-size: calc(var(--theme-icon-scale, 1) * 1.5em);
               line-height: 0;
               vertical-align: middle;
               position: relative;
@@ -749,7 +754,7 @@
 
                   &:after {
                     background-color: var(--theme-accent-color, #EB2B6D);
-                    border-radius: var(--theme-corner-radius, 0.5em);
+                    border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
                     color: #ffffff;
                     content: attr(data-title);
                     font-family: 'Comfortaa-Bold';
@@ -780,7 +785,7 @@
 
           .group {
             background-color: var(--theme-bg-color-3, #FF674C);
-            border-radius: var(--theme-corner-radius, 0.75em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
             display: flex;
             flex-direction: column;
             margin-right: 0.25em;
@@ -821,7 +826,7 @@
           align-items: center;
           background-color: var(--theme-accent-color, #EB2B6D);
           border: none;
-          border-radius: var(--theme-corner-radius, 0.5em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
           color: #ffffff;
           cursor: pointer;
           display: inline-flex;
@@ -879,7 +884,7 @@
                 width: 1.5em;
                 height: 1em;
                 margin-right: 0.5em;
-                background-color: var(--theme-option-accent-color-2, #FFCB4C);
+                background-color: var(--theme-option-accent-color-2-alt, #FFCB4C);
                 border-radius: 99em;
                 box-shadow: 0em 0em 0em rgba(#000000, 0);
                 position: absolute;
@@ -934,7 +939,7 @@
             &::-webkit-slider-thumb {
               border: none;
               border-radius: 0.5em;
-              background-color: var(--theme-option-accent-color-2, #FFCB4C);
+              background-color: var(--theme-option-accent-color-2-alt, #FFCB4C);
               background-image: url('/svg/range-thumb.svg');
               background-size: 0.75em 0.75em;
               background-repeat: no-repeat;
@@ -950,7 +955,7 @@
             &::-moz-range-thumb {
               border: none;
               border-radius: 0.5em;
-              background-color: var(--theme-option-accent-color-2, #FFCB4C);
+              background-color: var(--theme-option-accent-color-2-alt, #FFCB4C);
               background-image: url('/svg/range-thumb.svg');
               background-size: 0.75em 0.75em;
               background-repeat: no-repeat;
@@ -974,7 +979,7 @@
           &[type="text"] {
             background-color: var(--theme-accent-color, #EB2B6D);
             border: none;
-            border-radius: var(--theme-corner-radius, 0.75em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
             box-shadow: inset 0em 0.25em 0em rgba(#000000, 0.15);
             color: #ffffff;
             font-family: inherit;
@@ -1007,8 +1012,8 @@
 
         select {
           border: none;
-          border-radius: var(--theme-corner-radius, 0.5em);
-          background-color: var(--theme-option-accent-color-2, #FFCB4C);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
+          background-color: var(--theme-option-accent-color-2-alt, #FFCB4C);
           background-size: 0.75em 0.75em;
           background-repeat: no-repeat;
           background-position: center;
@@ -1030,31 +1035,31 @@
           -webkit-appearance: none;
           appearance: none;
           border: none;
-          border-radius: var(--theme-corner-radius, 0.4em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.4em);
           padding: 0;
           cursor: pointer;
 
           &::-webkit-color-swatch-wrapper {
             padding: 0;
-            border-radius: var(--theme-corner-radius, 0.4em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.4em);
             overflow: hidden;
           }
 
           &::-webkit-color-swatch {
             border: none;
-            border-radius: var(--theme-corner-radius, 0.4em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.4em);
           }
 
           &::-moz-color-swatch {
             border: none;
-            border-radius: var(--theme-corner-radius, 0.4em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.4em);
           }
         }
 
         textarea {
           background-color: var(--theme-accent-color, #EB2B6D);
           border: none;
-          border-radius: var(--theme-corner-radius, 0.75em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
           box-shadow: inset 0em 0.25em 0em rgba(#000000, 0.15);
           color: #ffffff;
           font-family: inherit;
@@ -1077,7 +1082,7 @@
   
         .close {
           background-color: var(--theme-option-accent-color-2, #FFC24C);
-          border-radius: var(--theme-corner-radius, 0.5em);
+          border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
           box-shadow: 0em 0.25em 0em rgba(#000000, 0.15);
           color: var(--theme-accent-color, #EB2B6D);
           display: flex;
@@ -1387,7 +1392,7 @@
     
     .key {
       background-color: rgba(0, 0, 0, 0.25);
-      border-radius: var(--theme-corner-radius, 0.5em);
+      border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
       color: #ffffff;
       display: flex;
       align-items: center;
@@ -1493,6 +1498,10 @@
       &.selected {
         background-color: var(--theme-editor-icon-highlight-color, #EB2B6D);
         border-radius: 0.5em;
+
+        // Highlighted buttons show their icon in the selected colour
+        .material-symbols-rounded { color: var(--theme-editor-icon-selected-color, #ffffff); }
+        .icon-mask { background-color: var(--theme-editor-icon-selected-color, #ffffff); }
       }
 
       &:hover .material-symbols-rounded {
@@ -1626,7 +1635,7 @@
       background-color: var(--theme-editor-textbox-bg-color, #1a1a1a);
       color: var(--theme-editor-textbox-font-color, #ffffff);
       border: none;
-      border-radius: var(--theme-corner-radius, 0.5em);
+      border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
       padding: 0.2em 0.4em;
       font-family: inherit;
     }
@@ -1862,7 +1871,7 @@
 
           input[type="text"] {
             background-color: var(--theme-editor-textbox-bg-color, #1a1a1a);
-            border-radius: var(--theme-corner-radius, 0.5em);
+            border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
             color: var(--theme-editor-textbox-font-color, #ffffff);
             padding: 0.35em 0.5em;
             border: none;
@@ -1904,7 +1913,7 @@
       // Translucent Popup theme group: every nested translucent layer in this popup (.tile.filled, .property-row)
       // reuses this same --theme-popup-bg colour, just visually stacking, rather than being separately configurable.
       background-color: var(--theme-popup-bg, rgba(#000000, 0.5));
-      border-radius: var(--theme-corner-radius, 0.75em);
+      border-radius: calc(var(--theme-corner-scale, 1) * 0.75em);
       box-shadow: 0em 0.25em 0em rgba(#000000, 0.15);
       padding: 1em;
       box-sizing: border-box;
@@ -2064,7 +2073,7 @@
             flex-shrink: 0;
             background-color: rgba(#000000, 0.35);
             border: 0.1em solid var(--theme-accent-color, #EB2B6D);
-            border-radius: min(var(--theme-corner-radius, 0.3em), 0.4em);
+            border-radius: min(calc(var(--theme-corner-scale, 1) * 0.3em), 0.4em);
             cursor: pointer;
 
             &:checked {
@@ -2239,13 +2248,13 @@
 /* Jump-ready indicator dot (appended directly to document.body by App.js) */
 #jump-indicator {
   position: fixed;
-  width: 1.1vh; // Scales with screen height like the game view (~12px at 1080p)
-  height: 1.1vh;
+  font-size: var(--ui-font-size); // Same em base as the rest of the UI (12px at 1080p)
+  width: 0.375em;
+  height: 0.375em;
   background-color: #00ff00;
   border-radius: 50%;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.1s ease-in-out;
   z-index: 100;
 
   &.active { opacity: 1; }
@@ -2309,30 +2318,123 @@
   -webkit-font-smoothing: antialiased;
 }
 
-// Bubble's buttons were hand-tuned with more corner rounding (0.75em) than the themeCornerRadius slider's
-// own default (8px) gives - this restores their correct fixed rounding only while Bubble is selected, so
-// Classic/Legacy (and any custom radius the user picks) still uses the single --theme-corner-radius value everywhere.
-:root[data-theme-preset="bubble"] {
-  .page {
-    .nav .button,
-    .footer .button,
-    .nav .score,
-    .nav .score .current,
-    .content .carousel .item .thumbnail:after,
-    .content .carousel .item .thumbnail img,
-    .content .carousel .item .thumbnail .svg {
-      border-radius: 0.75em;
+// Flat Style theme switch: solid old UI blocks, every colour comes from a theme variable (set in App.applyThemeStyles)
+:root[data-theme-flat-style="true"] .ui-bubble {
+  // Main menu buttons and uncompleted level thumbnails become solid blocks instead of pictures
+  .page .content .carousel {
+    &.menu .item .thumbnail img, .item.uncompleted .thumbnail img { object-position: -99em 0; } // Hides the picture, keeps the block
+
+    &.menu .item .thumbnail {
+      img, .svg { background-color: var(--theme-button-color); }
+      .svg svg { display: none; }
     }
 
-    // Matches Stats.vue's fixed icon-square rounding so the footer version button's blue icon
-    // stays visually consistent with the campaign FPS element's blue icon under Bubble
-    .footer .button .material-symbols-rounded {
-      border-radius: 0.5em;
+    .item.uncompleted .thumbnail img { background-color: var(--theme-uncompleted-level-color); }
+  }
+
+  // Page title accent word (the 3D in BOXEL3D)
+  .page .content h1 .title-accent { color: var(--theme-button-color); }
+
+  // Nav buttons on every page and all in-game buttons
+  .page .nav .button { background-color: var(--theme-button-color); }
+
+  .page.campaign {
+    .nav .button, .nav .score .current, .nav .score .record, .footer .button, .controls .key:not(.active) {
+      background-color: var(--theme-button-color);
+      color: var(--theme-control-text-color);
+    }
+
+    .nav, .footer {
+      .material-symbols-rounded { color: var(--theme-control-text-color); }
+    }
+
+    // Timer and best time are separate blocks with a small gap
+    .nav .score { background-color: transparent; }
+    .nav .score .record {
+      border-radius: calc(var(--theme-corner-scale) * 0.75em);
+      margin-top: 0.25em;
     }
   }
 
-  .popup.settings .container .tabs .tab {
-    border-top-left-radius: 0.75em;
-    border-bottom-left-radius: 0.75em;
+  // Footer button icon squares on every page
+  .page .footer .button .material-symbols-rounded { background-color: var(--theme-control-color); }
+
+  // Level editor: highlighted buttons have no background, only the selected icon colour
+  .level-editor .item.highlight, .level-editor .item.selected { background-color: transparent; }
+
+  // Level Properties popup: editor bar colours, inputs styled like the top bar Current Z textbox
+  .fancy-popup.level-properties-popup .content {
+    background-color: var(--theme-editor-toolbar-bg);
+
+    .level-properties .property-row {
+      background-color: transparent;
+      border-radius: calc(var(--theme-corner-scale) * 0.75em);
+
+      select, textarea, input[type="checkbox"] {
+        background-color: var(--theme-editor-textbox-bg-color);
+        color: var(--theme-editor-textbox-font-color);
+        border: none;
+        border-radius: calc(var(--theme-corner-scale) * 0.5em);
+      }
+
+      input[type="checkbox"]:checked:after { border-color: var(--theme-editor-textbox-font-color); }
+      select option, select option:checked { background-color: var(--theme-editor-textbox-bg-color); color: var(--theme-editor-textbox-font-color); }
+
+      input[type="range"] {
+        &::-webkit-slider-runnable-track { background: var(--theme-editor-textbox-bg-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-moz-range-track { background: var(--theme-editor-textbox-bg-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-webkit-slider-thumb { background-color: var(--theme-editor-textbox-font-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-moz-range-thumb { background-color: var(--theme-editor-textbox-font-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+      }
+    }
   }
+
+  // Level manager: level name boxes match the list behind them
+  .level-manager .row .col .list-item input[type="text"] { background-color: var(--theme-editor-toolbar-bg); }
+
+  // Settings tabs: control colour, the selected tab keeps the panel colour so it joins the panel
+  .popup.settings .container .tabs .tab:not(.selected) { background-color: var(--theme-control-color); }
+
+  // Settings, pause, changelog, textbox and finish popups: plain panel, solid controls, plain slider thumbs, control text colour everywhere
+  .popup.settings, .popup.pause, .popup.changelog, .popup.textbox, .popup.finish {
+    .container .content {
+      color: var(--theme-control-text-color);
+
+      .background-svg { display: none; }
+      .material-symbols-rounded { color: var(--theme-control-text-color); }
+
+      button, button.selected, select, .close, input[type="text"], textarea {
+        background-color: var(--theme-control-color);
+        color: var(--theme-control-text-color);
+      }
+
+      button.retry { background-color: var(--theme-bg-color-2); } // Finish popup retry button sits in the panel colour
+      input[type="checkbox"] + label:before { background-color: var(--theme-control-color); opacity: 1; } // Toggle track, same while off as on
+
+      input[type="range"] {
+        &::-webkit-slider-runnable-track { background: var(--theme-control-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-moz-range-track { background: var(--theme-control-color); border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-webkit-slider-thumb { background-color: var(--theme-control-text-color); background-image: none; border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+        &::-moz-range-thumb { background-color: var(--theme-control-text-color); background-image: none; border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+      }
+    }
+  }
+}
+
+// Shadows theme switch off: no shadows anywhere, including overlays outside .ui-bubble (editor icon shadows are zeroed in App.applyThemeStyles)
+:root[data-theme-shadows="false"] {
+  *, *::before, *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  // Slider thumbs aren't matched by *, so only these popups' sliders drop their shadow (the level editor bar keeps its own)
+  .ui-bubble .popup.settings, .ui-bubble .popup.pause, .ui-bubble .popup.changelog, .ui-bubble .fancy-popup.level-properties-popup {
+    input[type="range"] {
+      &::-webkit-slider-thumb { box-shadow: none !important; }
+      &::-moz-range-thumb { box-shadow: none !important; }
+    }
+  }
+
+  .ui-bubble .page .nav .button img { filter: none; }
 }

@@ -51,6 +51,7 @@
     app.pauseLevel();
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'pause',
         text: i18n.t('popup.text.paused'),
         inputs: [
           { value: i18n.t('popup.button.exit'), type: 'button', shortcut: 'KeyE', callback: function(e) { app.exitCampaign(); }},
@@ -179,7 +180,7 @@
 </script>
 
 <template>
-  <div class="page">
+  <div class="page campaign">
     <div class="nav">
       <div class="score fade-in" @click="pauseLevel()" :title="i18n.t('campaign.button.pause')">
         <div class="current">

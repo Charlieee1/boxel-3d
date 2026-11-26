@@ -1,6 +1,7 @@
 <script setup>
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import ranges from '../json/themeSettings.json'; // Fixed slider ranges and units for numeric theme settings
 
   const i18n = useI18n({ useScope: 'global' });
   const app = window.app;
@@ -42,6 +43,7 @@
         <select id="themeEditorPreset" data-setting="theme.editorPreset" :value="settings.theme.editorPreset" @change="$emit('updateSettings', $event)">
           <option value="dark">{{ i18n.t('settings.theme.preset_dark') }}</option>
           <option value="light">{{ i18n.t('settings.theme.preset_light') }}</option>
+          <option value="classic">{{ i18n.t('settings.theme.preset_classic') }}</option>
           <option value="funk">{{ i18n.t('settings.theme.preset_funk') }}</option>
         </select>
       </div>
@@ -107,12 +109,35 @@
         <input type="color" id="themeMultiplayerBgColor" data-setting="theme.multiplayerBgColor" :value="settings.theme.multiplayerBgColor" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option">
+        <input type="checkbox" id="themeReverseMultiplayerShades" data-setting="theme.reverseMultiplayerShades" :checked="settings.theme.reverseMultiplayerShades == true" @change="$emit('updateSettings', $event)">
+        <label for="themeReverseMultiplayerShades">{{ i18n.t('settings.theme.reverse_multiplayer_shades') }}</label>
+      </div>
+      <div class="option">
         <label for="themePlayButtonBgColor">{{ i18n.t('settings.theme.play_button_bg_color') }}</label>
         <input type="color" id="themePlayButtonBgColor" data-setting="theme.playButtonBgColor" :value="settings.theme.playButtonBgColor" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option">
         <label for="themePlayButtonPlatformColor">{{ i18n.t('settings.theme.play_button_platform_color') }}</label>
         <input type="color" id="themePlayButtonPlatformColor" data-setting="theme.playButtonPlatformColor" :value="settings.theme.playButtonPlatformColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themePlayButtonStripeColor">{{ i18n.t('settings.theme.play_button_stripe_color') }}</label>
+        <input type="color" id="themePlayButtonStripeColor" data-setting="theme.playButtonStripeColor" :value="settings.theme.playButtonStripeColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themePlayButtonStripeOpacity">{{ i18n.t('settings.theme.play_button_stripe_opacity') }}</label>
+      </div>
+      <div class="option">
+        <input type="range" id="themePlayButtonStripeOpacity" data-setting="theme.playButtonStripeOpacity" :min="ranges.playButtonStripeOpacity.min" :max="ranges.playButtonStripeOpacity.max" :step="ranges.playButtonStripeOpacity.step" :value="settings.theme.playButtonStripeOpacity" @input="$emit('updateSettings', $event)">
+        <label for="themePlayButtonStripeOpacity">{{ settings.theme.playButtonStripeOpacity }}</label>
+      </div>
+      <div class="option">
+        <label for="themePlayButtonIconColor">{{ i18n.t('settings.theme.play_button_icon_color') }}</label>
+        <input type="color" id="themePlayButtonIconColor" data-setting="theme.playButtonIconColor" :value="settings.theme.playButtonIconColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themePlayButtonIconShadeColor">{{ i18n.t('settings.theme.play_button_icon_shade_color') }}</label>
+        <input type="color" id="themePlayButtonIconShadeColor" data-setting="theme.playButtonIconShadeColor" :value="settings.theme.playButtonIconShadeColor" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option">
         <label for="themeMenuBgColor1">{{ i18n.t('settings.theme.menu_bg_color_1') }}</label>
@@ -134,15 +159,39 @@
         <label for="themeCornerRadius">{{ i18n.t('settings.theme.corner_radius') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeCornerRadius" data-setting="theme.cornerRadius" min="0" max="32" step="1" :value="settings.theme.cornerRadius" @input="$emit('updateSettings', $event)">
-        <label for="themeCornerRadius">{{ settings.theme.cornerRadius }}</label>
+        <input type="range" id="themeCornerRadius" data-setting="theme.cornerRadius" :min="ranges.cornerRadius.min" :max="ranges.cornerRadius.max" :step="ranges.cornerRadius.step" :value="settings.theme.cornerRadius" @input="$emit('updateSettings', $event)">
+        <label for="themeCornerRadius">{{ Math.round(settings.theme.cornerRadius * 100) }}%</label>
       </div>
       <div class="option">
         <label for="themeIconSize">{{ i18n.t('settings.theme.icon_size') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeIconSize" data-setting="theme.iconSize" min="0.5" max="3" step="0.1" :value="settings.theme.iconSize" @input="$emit('updateSettings', $event)">
-        <label for="themeIconSize">{{ settings.theme.iconSize }}em</label>
+        <input type="range" id="themeIconSize" data-setting="theme.iconSize" :min="ranges.iconSize.min" :max="ranges.iconSize.max" :step="ranges.iconSize.step" :value="settings.theme.iconSize" @input="$emit('updateSettings', $event)">
+        <label for="themeIconSize">{{ Math.round(settings.theme.iconSize * 100) }}%</label>
+      </div>
+      <div class="option">
+        <input type="checkbox" id="themeFlatStyle" data-setting="theme.flatStyle" :checked="settings.theme.flatStyle == true" @change="$emit('updateSettings', $event)">
+        <label for="themeFlatStyle">{{ i18n.t('settings.theme.flat_style') }}</label>
+      </div>
+      <div class="option">
+        <input type="checkbox" id="themeShadows" data-setting="theme.shadows" :checked="settings.theme.shadows == true" @change="$emit('updateSettings', $event)">
+        <label for="themeShadows">{{ i18n.t('settings.theme.shadows') }}</label>
+      </div>
+      <div class="option">
+        <label for="themeButtonColor">{{ i18n.t('settings.theme.button_color') }}</label>
+        <input type="color" id="themeButtonColor" data-setting="theme.buttonColor" :value="settings.theme.buttonColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themeControlColor">{{ i18n.t('settings.theme.control_color') }}</label>
+        <input type="color" id="themeControlColor" data-setting="theme.controlColor" :value="settings.theme.controlColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themeControlTextColor">{{ i18n.t('settings.theme.control_text_color') }}</label>
+        <input type="color" id="themeControlTextColor" data-setting="theme.controlTextColor" :value="settings.theme.controlTextColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themeUncompletedLevelColor">{{ i18n.t('settings.theme.uncompleted_level_color') }}</label>
+        <input type="color" id="themeUncompletedLevelColor" data-setting="theme.uncompletedLevelColor" :value="settings.theme.uncompletedLevelColor" @change="$emit('updateSettings', $event)">
       </div>
     </div>
     <div class="group">
@@ -159,15 +208,15 @@
         <label for="themeEditorToolbarOpacity">{{ i18n.t('settings.theme.editor_toolbar_opacity') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeEditorToolbarOpacity" data-setting="theme.editorToolbarOpacity" min="0" max="1" step="0.05" :value="settings.theme.editorToolbarOpacity" @input="$emit('updateSettings', $event)">
+        <input type="range" id="themeEditorToolbarOpacity" data-setting="theme.editorToolbarOpacity" :min="ranges.editorToolbarOpacity.min" :max="ranges.editorToolbarOpacity.max" :step="ranges.editorToolbarOpacity.step" :value="settings.theme.editorToolbarOpacity" @input="$emit('updateSettings', $event)">
         <label for="themeEditorToolbarOpacity">{{ settings.theme.editorToolbarOpacity }}</label>
       </div>
       <div class="option">
         <label for="themeEditorIconSize">{{ i18n.t('settings.theme.editor_icon_size') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeEditorIconSize" data-setting="theme.editorIconSize" min="0.5" max="3" step="0.1" :value="settings.theme.editorIconSize" @input="$emit('updateSettings', $event)">
-        <label for="themeEditorIconSize">{{ settings.theme.editorIconSize }}em</label>
+        <input type="range" id="themeEditorIconSize" data-setting="theme.editorIconSize" :min="ranges.editorIconSize.min" :max="ranges.editorIconSize.max" :step="ranges.editorIconSize.step" :value="settings.theme.editorIconSize" @input="$emit('updateSettings', $event)">
+        <label for="themeEditorIconSize">{{ settings.theme.editorIconSize }}{{ ranges.editorIconSize.unit }}</label>
       </div>
       <div class="option">
         <label for="themeEditorIconDeselectedColor">{{ i18n.t('settings.theme.editor_icon_deselected_color') }}</label>
@@ -185,7 +234,7 @@
         <label for="themeEditorIconHighlightOpacity">{{ i18n.t('settings.theme.editor_icon_highlight_opacity') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeEditorIconHighlightOpacity" data-setting="theme.editorIconHighlightOpacity" min="0" max="1" step="0.1" :value="settings.theme.editorIconHighlightOpacity" @input="$emit('updateSettings', $event)">
+        <input type="range" id="themeEditorIconHighlightOpacity" data-setting="theme.editorIconHighlightOpacity" :min="ranges.editorIconHighlightOpacity.min" :max="ranges.editorIconHighlightOpacity.max" :step="ranges.editorIconHighlightOpacity.step" :value="settings.theme.editorIconHighlightOpacity" @input="$emit('updateSettings', $event)">
         <label for="themeEditorIconHighlightOpacity">{{ settings.theme.editorIconHighlightOpacity }}</label>
       </div>
       <div class="option">
@@ -196,7 +245,7 @@
         <label for="themeEditorIconShadowOpacity">{{ i18n.t('settings.theme.editor_icon_shadow_opacity') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themeEditorIconShadowOpacity" data-setting="theme.editorIconShadowOpacity" min="0" max="1" step="0.05" :value="settings.theme.editorIconShadowOpacity" @input="$emit('updateSettings', $event)">
+        <input type="range" id="themeEditorIconShadowOpacity" data-setting="theme.editorIconShadowOpacity" :min="ranges.editorIconShadowOpacity.min" :max="ranges.editorIconShadowOpacity.max" :step="ranges.editorIconShadowOpacity.step" :value="settings.theme.editorIconShadowOpacity" @input="$emit('updateSettings', $event)">
         <label for="themeEditorIconShadowOpacity">{{ settings.theme.editorIconShadowOpacity }}</label>
       </div>
       <div class="option">
@@ -214,7 +263,7 @@
         <label for="themePopupOpacity">{{ i18n.t('settings.theme.popup_opacity') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="themePopupOpacity" data-setting="theme.popupOpacity" min="0" max="1" step="0.05" :value="settings.theme.popupOpacity" @input="$emit('updateSettings', $event)">
+        <input type="range" id="themePopupOpacity" data-setting="theme.popupOpacity" :min="ranges.popupOpacity.min" :max="ranges.popupOpacity.max" :step="ranges.popupOpacity.step" :value="settings.theme.popupOpacity" @input="$emit('updateSettings', $event)">
         <label for="themePopupOpacity">{{ settings.theme.popupOpacity }}</label>
       </div>
       <div class="option">

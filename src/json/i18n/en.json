@@ -248,6 +248,17 @@
       "preset_legacy": "Legacy",
       "preset_light": "Light",
       "preset_funk": "Funk",
+      "button_color": "Button Colour",
+      "control_color": "Control Colour",
+      "control_text_color": "Control Text Colour",
+      "flat_style": "Flat Style",
+      "play_button_icon_color": "Play Button Icon Colour",
+      "play_button_icon_shade_color": "Play Button Icon Shade",
+      "play_button_stripe_color": "Play Button Stripe Colour",
+      "play_button_stripe_opacity": "Play Button Stripe Opacity",
+      "reverse_multiplayer_shades": "Reverse Multiplayer Button Shades",
+      "shadows": "Shadows",
+      "uncompleted_level_color": "Uncompleted Level Colour",
       "title": "Theme"
     }
   },

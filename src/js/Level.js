@@ -389,6 +389,7 @@ class Level extends Group {
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'textbox',
         text: text,
         inputs: [{ type: 'button', value: 'popup.button.continue', callback: function() {
           app.resumeLevel();
@@ -455,9 +456,13 @@ class Level extends Group {
     return author;
   }
 
+  // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
+  isCommunityPack(pack) {
+    return pack.title === 'Level Packs';
+  }
+
   isFromCommunityPack(title, target = null) {
-    // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
-    var communityPack = levels.packs.find(pack => pack.title === 'Level Packs');
+    var communityPack = levels.packs.find(pack => this.isCommunityPack(pack));
     if (communityPack == null) return false;
     if (target != null) return communityPack.levels.includes(target); // Exact level, titles can be duplicated
     return communityPack.levels.some(level => level.title === title);

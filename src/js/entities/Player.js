@@ -464,11 +464,12 @@ class Player extends Cube {
       // Dispatch new popup from event
       window.dispatchEvent(new CustomEvent('openPopup', {
         detail: {
+          class: 'finish',
           title: time,
           text: 'popup.text.seconds',
           description: hasNewScore ? 'popup.description.new_record' : null,
           inputs: [
-            { value: 'popup.button.retry', type: 'button', shortcut: 'KeyR', callback: function() { app.level.retryLevel(); window.dispatchEvent(new CustomEvent('closePopup')); }},
+            { value: 'popup.button.retry', type: 'button', class: 'retry', shortcut: 'KeyR', callback: function() { app.level.retryLevel(); window.dispatchEvent(new CustomEvent('closePopup')); }},
             { value: 'popup.button.continue', type: 'button', shortcut: 'Space', callback: function() { app.level.exitLevel(); window.dispatchEvent(new CustomEvent('closePopup')); }}
           ]
         }

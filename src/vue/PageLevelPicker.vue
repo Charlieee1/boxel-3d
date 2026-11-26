@@ -134,6 +134,7 @@
         else item.tag = '<span class="material-symbols-rounded">more_horiz</span>';
 
         // Assign item values
+        item.class = score ? 'completed' : 'uncompleted'; // Styled per theme in Main.scss
         item.url = url;
         item.subtitle = item.description || item.title;
         item.theme = pack.theme;

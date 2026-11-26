@@ -14,7 +14,7 @@ html {
   min-height: 360px;
 
   body {
-    background-color: #1e1e1e;
+    background-color: var(--theme-bg-color-1, #1e1e1e); // Shows behind the transparent game canvas (ex: level editor)
     margin: 0;
     font-size: 100%;
     width: inherit;

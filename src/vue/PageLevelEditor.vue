@@ -298,6 +298,7 @@
     window.addEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.addEventListener('forceBuildDisabled', onForceBuildDisabled);
     window.addEventListener('snapModeChanged', onSnapModeChanged);
+    window.addEventListener('hardExitLevelEditor', hardExit);
   }
 
   function removeEventListeners() {
@@ -323,6 +324,7 @@
     window.removeEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.removeEventListener('forceBuildDisabled', onForceBuildDisabled);
     window.removeEventListener('snapModeChanged', onSnapModeChanged);
+    window.removeEventListener('hardExitLevelEditor', hardExit);
   }
 
   function popupOpened() {
@@ -695,6 +697,13 @@
     // Freeze a running playtest while settings is open, same as campaign
     isPausedBySettings = app.play == true;
     if (isPausedBySettings) app.pauseLevel();
+  }
+
+  // Theme preset change: leave a playtest for edit mode (closing settings must not resume it), then exit to the main menu keeping the checkpoint
+  function hardExit() {
+    if (isPausedBySettings || app.play == true) pauseLevel();
+    isPausedBySettings = false;
+    app.levelEditor.exitLevel('home', true);
   }
 
   function settingsClosing() {

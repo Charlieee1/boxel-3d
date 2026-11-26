@@ -2069,7 +2069,7 @@ class LevelEditor {
     this.savedHistoryIndex = app.levelHistory.historyIndex;
   }
 
-  exitLevel() {
+  exitLevel(page = 'level-manager', keepCheckpoint = false) {
     // Only prompt to save when there are edits AND they're unsaved since the last Ctrl+S/save-button.
     var hasEdits = app.levelHistory.history.length > 2;
     var unsaved = app.levelHistory.historyIndex !== this.savedHistoryIndex;
@@ -2080,16 +2080,16 @@ class LevelEditor {
           text: 'popup.text.save_level',
           inputs: [
             { value: 'popup.button.cancel', type: 'button', callback: () => { window.dispatchEvent(new CustomEvent('closePopup')); }},
-            { value: 'popup.button.no', type: 'button', callback: () => { this.saveAndExitLevelEditor(false); window.dispatchEvent(new CustomEvent('closePopup')); }},
-            { value: 'popup.button.yes', type: 'button', callback: () => { this.saveAndExitLevelEditor(true); window.dispatchEvent(new CustomEvent('closePopup')); }},
+            { value: 'popup.button.no', type: 'button', callback: () => { this.saveAndExitLevelEditor(false, page, keepCheckpoint); window.dispatchEvent(new CustomEvent('closePopup')); }},
+            { value: 'popup.button.yes', type: 'button', callback: () => { this.saveAndExitLevelEditor(true, page, keepCheckpoint); window.dispatchEvent(new CustomEvent('closePopup')); }},
           ]
         }
       }));
     }
-    else this.saveAndExitLevelEditor(false);
+    else this.saveAndExitLevelEditor(false, page, keepCheckpoint);
   }
 
-  saveAndExitLevelEditor(saveLevel) {
+  saveAndExitLevelEditor(saveLevel, page = 'level-manager', keepCheckpoint = false) {
     // Safety net: resolve any active exclusive action on exit so it can't leave editor actions gated permanently.
     this.cancelAction();
 
@@ -2103,10 +2103,10 @@ class LevelEditor {
     app.levelHistory.clear();
     this.savedHistoryIndex = null; // next editor session starts "unsaved"
     app.player.cancelRestart(); // A pending death respawn must not fire after leaving
-    app.player.removeCheckpoint();
+    if (keepCheckpoint == false) app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
     this.controlsOrbit.enabled = false;
-    window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-manager' }));
+    window.dispatchEvent(new CustomEvent('setPage', { detail: page }));
   }
 
   undo() {

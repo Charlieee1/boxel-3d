@@ -3,6 +3,7 @@ import { Utility } from './Utility.js';
 import { saveAs } from 'file-saver';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { runBackwardsCompatibility } from './BackwardsCompatibility.js';
+import { getPresetTheme } from './ThemePresets.js';
 
 class StorageManager {
   constructor() {
@@ -295,55 +296,20 @@ class StorageManager {
         deterministicMath: 'firefox',
         disableTextboxes: false,
         reverseControls: true,
-        skin: { id: 466, title: "Smile", url: "./png/smile.png" }
+        skin: { id: 1, title: "Pink", url: "./png/pink.png" }
       },
       multiplayer: {
         connection: '',
         name: 'Player',
         peer: this.generateHex('')
       },
-      theme: {
-        accentColor: '#eb2b6d',
-        bgColor1: '#1e1e1e',
-        bgColor2: '#FF8A4C',
-        bgColor3: '#FF674C',
-        cornerRadius: 8,
-        editorButtonBgColor: '#4ca9ff',
-        editorButtonBlocksColor: '#4c7dff',
-        editorButtonCraneColor: '#ffc24c',
-        editorIconDeselectedColor: '#999999',
-        editorIconHighlightColor: null,
-        editorIconHighlightColorIsExplicit: false,
-        editorIconHighlightOpacity: 1,
-        editorIconSelectedColor: '#ffffff',
-        editorIconShadowColor: '#000000',
-        editorIconShadowOpacity: 0.15,
-        editorIconSize: 1.5, // em multiplier, unit appended when applied as a CSS variable
-        editorTextboxBgColor: '#262626',
-        editorTextboxFontColor: '#ffffff',
+      // Preset values come from themePresets.json, these keys pick the presets
+      theme: Object.assign(getPresetTheme({ preset: 'bubble', editorPreset: 'dark', popupPreset: 'dark' }), {
+        preset: 'bubble',
         editorPreset: 'dark',
-        editorToolbarColor1: '#1a1a1a',
-        editorToolbarColor2: '#0e0e0e',
-        editorToolbarOpacity: 0.5,
-        iconSize: 1, // em multiplier, unit appended when applied as a CSS variable
-        menuBgColor1: '#7908eb',
-        menuBgColor2: '#9b08eb',
-        menuBgColor3: '#b122ff',
-        menuBgColor4: '#c04cff',
-        multiplayerBgColor: '#a8e148',
-        oldBackgrounds: false,
-        optionAccentColor: '#4ca9ff',
-        optionAccentColor2: '#FFC24C',
-        playButtonBgColor: '#ff4c8a',
-        playButtonPlatformColor: '#ffd687',
-        skinsBgColor: '#ff8a4c',
-        statsIconColor: '#4CA9FF',
-        popupBgColor: '#000000',
-        popupOpacity: 0.5,
         popupPreset: 'dark',
-        popupTextColor: '#ffffff',
-        preset: 'bubble'
-      },
+        oldBackgrounds: false
+      }),
       audio: {
         music: 'boxel-3d-classic',
         volume: util.isExtension() ? 0 : 0.5,
@@ -357,6 +323,9 @@ class StorageManager {
     if (storageSettings != null) {
       settings = JSON.parse(storageSettings);
     }
+
+    // Theme keys added since this save was made come from its own presets, not Bubble's
+    if (settings.theme != null && typeof settings.theme === 'object') this.fillMissingSettings(settings.theme, getPresetTheme(settings.theme));
 
     // Check if new child settings are null by looping through default
     this.fillMissingSettings(settings, defaultSettings);

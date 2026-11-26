@@ -955,7 +955,11 @@
     "version": "2.9.4-m1.2.4",
     "revisions": [
       "Re-enabled checkpoint glitch",
-      "Fixed bugs"
+      "Fixed bug: Settings menu wasn't consistent across all menus",
+      "Fixed bug: Stats setting wasn't saved across sessions",
+      "Fixed bug: Duplicate level names in the carousel caused problems with indexing",
+      "Fixed bug: Up arrow scrolled multiplayer chat",
+      "Fixed UI visuals"
     ]
   }
 ]

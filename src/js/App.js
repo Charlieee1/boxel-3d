@@ -17,6 +17,8 @@ import { LevelEditor } from './LevelEditor.js';
 import { Multiplayer } from './Multiplayer.js';
 import { Network } from './Network.js';
 import { setDeterministicMath } from './math/DeterministicMath.js';
+import themeSettings from '../json/themeSettings.json';
+import { getThemePreset } from './ThemePresets.js';
 
 class App {
   constructor() {
@@ -311,12 +313,13 @@ class App {
 
     // Add missing keys from storage
     this.storage.fillMissingSettings(settings, storageSettings);
+    this.validateThemeSettings(settings.theme);
 
-    // Each of the 3 preset dropdowns independently re-applies only its own group's defaults
+    // Each preset dropdown re-applies its own group's defaults, the main preset also picks an editor preset (applied below)
     var isUISwitchInLevel = false;
     if (settings.theme.preset != storageSettings.theme.preset) {
       Object.assign(settings.theme, this.getMainThemeDefaults(settings.theme.preset));
-      isUISwitchInLevel = this.state == 'campaign';
+      isUISwitchInLevel = this.state == 'campaign' || this.state == 'level-editor';
     }
     if (settings.theme.editorPreset != storageSettings.theme.editorPreset) {
       Object.assign(settings.theme, this.getEditorThemeDefaults(settings.theme.editorPreset));
@@ -345,69 +348,22 @@ class App {
 
     // Checkpoint glitch: switching UI mid-level hard exits to the main menu but keeps the checkpoint (like vanilla)
     if (isUISwitchInLevel) {
-      window.dispatchEvent(new CustomEvent('closeSettings')); // Closing resumes the level, so exit afterwards
-      this.exitCampaign(true, 'home');
+      if (this.state == 'level-editor') window.dispatchEvent(new CustomEvent('hardExitLevelEditor')); // The editor page stops its playtest, then asks to save
+      window.dispatchEvent(new CustomEvent('closeSettings')); // Closing resumes a campaign level, so exit afterwards
+      if (this.state == 'campaign') this.exitCampaign(true, 'home');
     }
     return true;
   }
 
-  // Main Theme preset: group 2 (general UI) only - group 3/4 are driven independently by their own dropdowns
+  // Main Theme preset (group 2) from themePresets.json, Funk re-rolls its colours each time it's selected
   getMainThemeDefaults(preset) {
-    // Group 2 defaults match Main.scss's actual pink/orange/yellow UI (verified fallbacks), not invented dark grey
-    var bubble = {
-      bgColor1: '#1e1e1e', bgColor2: '#FF8A4C', bgColor3: '#FF674C',
-      cornerRadius: 8, iconSize: 1,
-      accentColor: '#eb2b6d', optionAccentColor: '#4ca9ff', optionAccentColor2: '#FFC24C',
-      // Blue instead of the theme's orange accent - stands out against the flashy Bubble UI
-      statsIconColor: '#4CA9FF',
-      // Home-button svg recolouring - Bubble defaults match each svg's original art exactly (no visible change)
-      skinsBgColor: '#FF8A4C',
-      editorButtonBgColor: '#4CA9FF', editorButtonCraneColor: '#FFC24C', editorButtonBlocksColor: '#4C7DFF',
-      multiplayerBgColor: '#A8E148',
-      playButtonBgColor: '#FF4C8A', playButtonPlatformColor: '#FFD687',
-      menuBgColor1: '#7908EB', menuBgColor2: '#9B08EB', menuBgColor3: '#B122FF', menuBgColor4: '#C04CFF'
-    };
-
-    // Classic/Legacy match this repo's actual old (Origin.scss) UI colours, not invented ones
-    var classic = Object.assign({}, bubble, {
-      bgColor1: '#252526',
-      // Background 2/3 reuse Bubble's blue accent and a darker blue, instead of invented greys
-      bgColor2: '#4ca9ff', bgColor3: '#1d4264', cornerRadius: 4,
-      // Darker red accent; option-accent is a darker version of Bubble's blue, option-accent-2 is the dark purple
-      accentColor: '#8f193a', optionAccentColor: '#316ea6', optionAccentColor2: '#ffffff',
-      // Skins/pause-menu background primary colour
-      skinsBgColor: '#FF80C0',
-      // Level editor button: lighter purple crane, darker background (same hue/saturation, lower lightness - not desaturated)
-      editorButtonCraneColor: '#C25CFF', editorButtonBgColor: '#004A8F',
-      // Multiplayer button background swaps green for the repo's existing "classic" pack purple
-      multiplayerBgColor: '#990799',
-      // Play button: platforms lightened (same hue/saturation as the classic block colour, higher lightness);
-      // background matches the multiplayer button's own darkest derived shade
-      playButtonPlatformColor: '#C408C0', playButtonBgColor: '#1B0017',
-      // Menu background (background-purple.svg): ordered lightest (front) to darkest (back). Mid uses an
-      // interpolated tone (not one of the 3 given colours) since two of them were too close in lightness to
-      // tell apart - Front gets the lightest of the original 3, Far (nearest the darkest Back) gets the darkest
-      menuBgColor1: '#270925', menuBgColor2: '#630960', menuBgColor3: '#840E6F', menuBgColor4: '#A31577'
-    });
-    var legacy = Object.assign({}, classic, { cornerRadius: 0 });
-
+    var defaults = getThemePreset('main', preset);
     if (preset == 'funk') {
-      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected
-      var rnd = () => this.getRandomVividColor();
-      return Object.assign({}, bubble, {
-        bgColor1: rnd(), bgColor2: rnd(), bgColor3: rnd(),
-        cornerRadius: 8,
-        accentColor: rnd(), optionAccentColor: rnd(), optionAccentColor2: rnd(),
-        statsIconColor: rnd(),
-        skinsBgColor: rnd(),
-        editorButtonBgColor: rnd(), editorButtonCraneColor: rnd(), editorButtonBlocksColor: rnd(),
-        multiplayerBgColor: rnd(),
-        playButtonBgColor: rnd(), playButtonPlatformColor: rnd(),
-        menuBgColor1: rnd(), menuBgColor2: rnd(), menuBgColor3: rnd(), menuBgColor4: rnd()
-      });
+      this.randomizeThemeColors(defaults, ['bgColor1', 'bgColor2', 'bgColor3', 'accentColor', 'optionAccentColor', 'optionAccentColor2',
+        'statsIconColor', 'skinsBgColor', 'editorButtonBgColor', 'editorButtonCraneColor', 'editorButtonBlocksColor', 'multiplayerBgColor',
+        'playButtonBgColor', 'playButtonPlatformColor', 'menuBgColor1', 'menuBgColor2', 'menuBgColor3', 'menuBgColor4']);
     }
-
-    return { bubble: bubble, classic: classic, legacy: legacy }[preset] || bubble;
+    return defaults;
   }
 
   // Random fully-saturated, max-lightness hex colour (HSL S=100/L=50) - a random hue every call, for the Funk preset
@@ -415,49 +371,43 @@ class App {
     return this.util.hslToHex(this.util.randomNumber(0, 360), 100, lightness);
   }
 
-  // Level Editor Theme preset: group 3 only (dark/light)
-  getEditorThemeDefaults(preset) {
-    var dark = {
-      editorToolbarColor1: '#1a1a1a', editorToolbarColor2: '#0e0e0e', editorToolbarOpacity: 0.5,
-      editorIconSize: 1.5, editorIconDeselectedColor: '#999999', editorIconSelectedColor: '#ffffff',
-      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false, editorIconHighlightOpacity: 1,
-      editorIconShadowColor: '#000000', editorIconShadowOpacity: 0.15,
-      editorTextboxBgColor: '#262626', editorTextboxFontColor: '#ffffff'
-    };
-
-    // Light: inverted backgrounds/text/icon colours, same sizing/opacity/shadow mechanics as dark
-    var light = Object.assign({}, dark, {
-      editorToolbarColor1: '#e5e5e5', editorToolbarColor2: '#ffffff',
-      editorIconDeselectedColor: '#666666', editorIconSelectedColor: '#000000',
-      editorIconHighlightColor: null, editorIconHighlightColorIsExplicit: false,
-      editorTextboxBgColor: '#ffffff', editorTextboxFontColor: '#000000'
-    });
-
-    if (preset == 'funk') {
-      // Funk: every colour re-rolled at random (full hue wheel, max brightness) each time it's selected -
-      // textbox background is the one exception, kept at 1/4 lightness so it still reads as a background
-      var rnd = () => this.getRandomVividColor();
-      return Object.assign({}, dark, {
-        editorToolbarColor1: rnd(), editorToolbarColor2: rnd(), editorToolbarOpacity: 1,
-        editorIconDeselectedColor: rnd(), editorIconSelectedColor: rnd(),
-        editorIconHighlightColor: rnd(), editorIconHighlightColorIsExplicit: true, editorIconHighlightOpacity: 1,
-        editorIconShadowColor: rnd(), editorIconShadowOpacity: 1,
-        editorTextboxBgColor: this.getRandomVividColor(25), editorTextboxFontColor: rnd()
-      });
-    }
-
-    return { dark: dark, light: light }[preset] || dark;
+  // Funk: gives each listed theme colour its own random vivid hue
+  randomizeThemeColors(theme, keys, lightness = 50) {
+    keys.forEach(key => theme[key] = this.getRandomVividColor(lightness));
+    return theme;
   }
 
-  // Translucent Popup Theme preset: group 4 only (dark/light)
-  getPopupThemeDefaults(preset) {
-    var dark = { popupOpacity: 0.5, popupBgColor: '#000000', popupTextColor: '#ffffff' };
-    var light = { popupOpacity: 0.5, popupBgColor: '#ffffff', popupTextColor: '#000000' };
-    // Funk: no opacity (fully solid), random max-brightness colours re-rolled each time it's selected
+  // Level Editor Theme preset (group 3), Funk keeps its textbox background at 1/4 lightness so it still reads as a background
+  getEditorThemeDefaults(preset) {
+    var defaults = getThemePreset('editor', preset);
     if (preset == 'funk') {
-      return { popupOpacity: 1, popupBgColor: this.getRandomVividColor(), popupTextColor: this.getRandomVividColor() };
+      this.randomizeThemeColors(defaults, ['editorToolbarColor1', 'editorToolbarColor2', 'editorIconDeselectedColor', 'editorIconSelectedColor',
+        'editorIconHighlightColor', 'editorIconShadowColor', 'editorTextboxFontColor']);
+      this.randomizeThemeColors(defaults, ['editorTextboxBgColor'], 25);
     }
-    return { dark: dark, light: light }[preset] || dark;
+    return defaults;
+  }
+
+  // Translucent Popup Theme preset (group 4)
+  getPopupThemeDefaults(preset) {
+    var defaults = getThemePreset('popup', preset);
+    if (preset == 'funk') this.randomizeThemeColors(defaults, ['popupBgColor', 'popupTextColor']);
+    return defaults;
+  }
+
+  // Numeric theme settings that are the wrong type or outside their fixed range (ex: saved in older units) fall back to the preset default
+  validateThemeSettings(theme) {
+    var defaults = Object.assign({}, this.getMainThemeDefaults(theme.preset), this.getEditorThemeDefaults(theme.editorPreset), this.getPopupThemeDefaults(theme.popupPreset));
+    for (var key in themeSettings) {
+      var range = themeSettings[key];
+      var value = theme[key];
+      if (typeof value !== 'number' || isNaN(value) || value < range.min || value > range.max) theme[key] = defaults[key];
+    }
+  }
+
+  // Numeric theme setting as a CSS value, with its unit from themeSettings.json
+  getThemeValue(theme, key) {
+    return theme[key] + themeSettings[key].unit;
   }
 
   // Push current theme settings to CSS custom properties so Main.scss can consume them live
@@ -467,53 +417,59 @@ class App {
       ? settings.theme.editorIconHighlightColor
       : this.util.hexMidpoint('#000000', settings.theme.accentColor);
 
-    // Bubble's art was hand-tuned with larger corner rounding on some elements than the single
-    // themeCornerRadius slider gives by default - Main.scss uses this attribute to special-case those
-    // elements back to their correct fixed rounding only while the Bubble preset is selected
-    document.documentElement.setAttribute('data-theme-preset', settings.theme.preset);
+    // Style switches from theme settings, read by Main.scss
+    document.documentElement.setAttribute('data-theme-flat-style', settings.theme.flatStyle == true);
+    document.documentElement.setAttribute('data-theme-shadows', settings.theme.shadows != false);
 
     root.setProperty('--theme-bg-color-1', settings.theme.bgColor1);
     root.setProperty('--theme-bg-color-2', settings.theme.bgColor2);
     root.setProperty('--theme-bg-color-3', settings.theme.bgColor3);
-    root.setProperty('--theme-corner-radius', settings.theme.cornerRadius + 'px');
-    root.setProperty('--theme-icon-size', settings.theme.iconSize + 'em');
+    // Scales each element's own vanilla rounding/icon size (see Main.scss), 1 = vanilla exactly
+    root.setProperty('--theme-corner-scale', this.getThemeValue(settings.theme, 'cornerRadius'));
+    root.setProperty('--theme-icon-scale', this.getThemeValue(settings.theme, 'iconSize'));
     root.setProperty('--theme-accent-color', settings.theme.accentColor);
     root.setProperty('--theme-option-accent-color', settings.theme.optionAccentColor);
     root.setProperty('--theme-option-accent-color-2', settings.theme.optionAccentColor2);
+    root.setProperty('--theme-option-accent-color-2-alt', this.util.shadeHex(settings.theme.optionAccentColor2, 3, 0, 0));
     root.setProperty('--theme-stats-icon-color', settings.theme.statsIconColor);
+    root.setProperty('--theme-button-color', settings.theme.buttonColor);
+    root.setProperty('--theme-control-color', settings.theme.controlColor);
+    root.setProperty('--theme-control-text-color', settings.theme.controlTextColor);
+    root.setProperty('--theme-uncompleted-level-color', settings.theme.uncompletedLevelColor);
 
-    // Home-button svg recolouring - each "shade"/gradient stop is derived from the one base setting per element,
-    // via the exact hue/saturation/lightness offset the original hand-authored art used between its own tones
-    // (an HSL shift, not an RGB mix toward black/white, which looked muddy/brown on warm hues)
+    // Home-button svg recolouring: each shade is the art's exact HSL offset from its element's one base colour
     root.setProperty('--theme-skins-bg-color', settings.theme.skinsBgColor);
     root.setProperty('--theme-skins-bg-color-dark', this.util.shadeHex(settings.theme.skinsBgColor, -11.73, 0, 0));
     root.setProperty('--theme-skins-bg-color-mid', this.util.shadeHex(settings.theme.skinsBgColor, -2.35, 0, 0));
     root.setProperty('--theme-editor-button-bg-color', settings.theme.editorButtonBgColor);
     root.setProperty('--theme-editor-button-crane-color', settings.theme.editorButtonCraneColor);
-    root.setProperty('--theme-editor-button-crane-color-light', this.util.shadeHex(settings.theme.editorButtonCraneColor, 0, 0, 11));
+    root.setProperty('--theme-editor-button-crane-color-light', this.util.shadeHex(settings.theme.editorButtonCraneColor, -0.1, 0, 11.6));
     root.setProperty('--theme-editor-button-blocks-color', settings.theme.editorButtonBlocksColor);
-    root.setProperty('--theme-editor-button-blocks-color-light', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -23, 0, 14));
-    root.setProperty('--theme-editor-button-blocks-color-lighter', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -22, 0, 27));
+    root.setProperty('--theme-editor-button-blocks-color-light', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -22.3, 0, 14.1));
+    root.setProperty('--theme-editor-button-blocks-color-lighter', this.util.shadeHex(settings.theme.editorButtonBlocksColor, -22, 0, 27.5));
     var multiplayerBase = settings.theme.multiplayerBgColor;
-    var multiplayerShade1 = this.util.shadeHex(multiplayerBase, 1, 5, -12);
-    var multiplayerShade2 = this.util.shadeHex(multiplayerBase, 2, 28, -21);
-    var multiplayerShade3 = this.util.shadeHex(multiplayerBase, 9, 28, -26);
+    var multiplayerShade1 = this.util.shadeHex(multiplayerBase, 0.3, 5.4, -11.8);
+    var multiplayerShade2 = this.util.shadeHex(multiplayerBase, 2, 28.2, -21.6);
+    var multiplayerShade3 = this.util.shadeHex(multiplayerBase, 8.8, 28.2, -26.5);
     root.setProperty('--theme-multiplayer-bg-color', multiplayerBase);
     root.setProperty('--theme-multiplayer-bg-color-shade-1', multiplayerShade1);
     root.setProperty('--theme-multiplayer-bg-color-shade-2', multiplayerShade2);
     root.setProperty('--theme-multiplayer-bg-color-shade-3', multiplayerShade3);
-    // Bubble keeps the original front-to-back layer order (lightest at back); Classic/Legacy flip it (darkest at back)
-    var multiplayerLayers = (settings.theme.preset == 'bubble')
-      ? [multiplayerBase, multiplayerShade1, multiplayerShade2, multiplayerShade3]
-      : [multiplayerShade3, multiplayerShade2, multiplayerShade1, multiplayerBase];
+    // Lightest layer at the back, reversing puts the darkest there instead
+    var multiplayerLayers = [multiplayerBase, multiplayerShade1, multiplayerShade2, multiplayerShade3];
+    if (settings.theme.reverseMultiplayerShades == true) multiplayerLayers.reverse();
     root.setProperty('--theme-multiplayer-layer-1', multiplayerLayers[0]);
     root.setProperty('--theme-multiplayer-layer-2', multiplayerLayers[1]);
     root.setProperty('--theme-multiplayer-layer-3', multiplayerLayers[2]);
     root.setProperty('--theme-multiplayer-layer-4', multiplayerLayers[3]);
     root.setProperty('--theme-play-button-bg-color', settings.theme.playButtonBgColor);
-    root.setProperty('--theme-play-button-bg-color-dark', this.util.shadeHex(settings.theme.playButtonBgColor, 0, -17, -10));
+    root.setProperty('--theme-play-button-bg-color-dark', this.util.shadeHex(settings.theme.playButtonBgColor, 0.2, -17.2, -10.4));
     root.setProperty('--theme-play-button-platform-color', settings.theme.playButtonPlatformColor);
-    root.setProperty('--theme-play-button-platform-color-dark', this.util.shadeHex(settings.theme.playButtonPlatformColor, 0, 0, -11));
+    root.setProperty('--theme-play-button-platform-color-dark', this.util.shadeHex(settings.theme.playButtonPlatformColor, 0.1, 0, -11.6));
+    root.setProperty('--theme-play-button-stripe-color', settings.theme.playButtonStripeColor);
+    root.setProperty('--theme-play-button-stripe-opacity', this.getThemeValue(settings.theme, 'playButtonStripeOpacity'));
+    root.setProperty('--theme-play-button-icon-color', settings.theme.playButtonIconColor);
+    root.setProperty('--theme-play-button-icon-shade-color', settings.theme.playButtonIconShadeColor);
     root.setProperty('--theme-menu-bg-color-1', settings.theme.menuBgColor1);
     root.setProperty('--theme-menu-bg-color-2', settings.theme.menuBgColor2);
     root.setProperty('--theme-menu-bg-color-3', settings.theme.menuBgColor3);
@@ -523,11 +479,12 @@ class App {
     root.setProperty('--theme-editor-toolbar-color-2', settings.theme.editorToolbarColor2);
     root.setProperty('--theme-editor-toolbar-bg', this.util.hexToRgba(settings.theme.editorToolbarColor1, settings.theme.editorToolbarOpacity));
     root.setProperty('--theme-editor-toolbar-bg-2', this.util.hexToRgba(settings.theme.editorToolbarColor2, settings.theme.editorToolbarOpacity));
-    root.setProperty('--theme-editor-icon-size', settings.theme.editorIconSize + 'em');
+    root.setProperty('--theme-editor-icon-size', this.getThemeValue(settings.theme, 'editorIconSize'));
     root.setProperty('--theme-editor-icon-deselected-color', settings.theme.editorIconDeselectedColor);
     root.setProperty('--theme-editor-icon-selected-color', settings.theme.editorIconSelectedColor);
     root.setProperty('--theme-editor-icon-highlight-color', this.util.hexToRgba(highlightColor, settings.theme.editorIconHighlightOpacity));
-    root.setProperty('--theme-editor-icon-shadow-color', this.util.hexToRgba(settings.theme.editorIconShadowColor, settings.theme.editorIconShadowOpacity));
+    var iconShadowOpacity = settings.theme.shadows != false ? settings.theme.editorIconShadowOpacity : 0; // The Shadows switch turns these off too
+    root.setProperty('--theme-editor-icon-shadow-color', this.util.hexToRgba(settings.theme.editorIconShadowColor, iconShadowOpacity));
     root.setProperty('--theme-editor-textbox-bg-color', settings.theme.editorTextboxBgColor);
     root.setProperty('--theme-editor-textbox-font-color', settings.theme.editorTextboxFontColor);
 

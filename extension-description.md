@@ -10,38 +10,38 @@ No internet? No problem. Play offline to beat your high scores.
 Changelog:
 
 v2.9.4-m1.2.4
-Re-enabled checkpoint glitch
-Fixed bugs:
-- Settings menu wasn't consistent across all menus
-- Stats setting wasn't saved across sessions
-- Duplicate level names in the carousel caused problems with indexing
-- Up arrow scrolled multiplayer chat
+- Re-enabled checkpoint glitch
+- Fixed bug: Settings menu wasn't consistent across all menus
+- Fixed bug: Stats setting wasn't saved across sessions
+- Fixed bug: Duplicate level names in the carousel caused problems with indexing
+- Fixed bug: Up arrow scrolled multiplayer chat
+- Fixed UI visuals
 
 v2.9.4-m1.2.3
-Fixed deterministic mode
-Fixed bug when level had no set theme
-Changed internal settings structure
-Moved thumbnail storage to IndexedDB
-Fixed zoom setting bugs
-Changed default settings
-Fixed camera bugs in level editor
-Fixed undo/redo
-Fixed multiselect box select
-Added reset block property to reset camera rotation animation
-Fixed jump indicator
-Enabled manual respawn during death animation always
-Fixed level editor popups
-Fixed bugs
+- Fixed deterministic mode
+- Fixed bug when level had no set theme
+- Changed internal settings structure
+- Moved thumbnail storage to IndexedDB
+- Fixed zoom setting bugs
+- Changed default settings
+- Fixed camera bugs in level editor
+- Fixed undo/redo
+- Fixed multiselect box select
+- Added reset block property to reset camera rotation animation
+- Fixed jump indicator
+- Enabled manual respawn during death animation always
+- Fixed level editor popups
+- Fixed bugs
 
 v2.9.4-m1.2.2
-Fixed level editor cube deletion bug while rotating
+- Fixed level editor cube deletion bug while rotating
 
 v2.9.3-m1.2.2
-Fixed deterministic mode
+- Fixed deterministic mode
 
 v2.9.3-m1.2.1
-Fixed deterministic mode bugs
-Fixed jump indicator bug
+- Fixed deterministic mode bugs
+- Fixed jump indicator bug
 
 v2.9.3-m1.2.0
 - Fixed bugs

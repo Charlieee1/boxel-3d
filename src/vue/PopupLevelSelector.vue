@@ -56,6 +56,7 @@
   let scores = app.storage.getScores();
   const selectedLevel = ref({});
   const selectedPack = ref({});
+  const oldBackgrounds = ref(false);
 
   // Set search logic from search values
   const search = ref('');
@@ -85,6 +86,7 @@
   function openLevelSelectorPopup(e) {
     isOpen.value = true;
     const settings = app.storage.getSettings();
+    oldBackgrounds.value = settings.theme.oldBackgrounds == true;
     const progress = getProgressFromSettings(settings);
     selectedLevel.value = levels.value[progress - 1];
     selectedPack.value = packs.value.find(pack => pack.title == selectedLevel.value.pack);
@@ -166,6 +168,12 @@
     return scores[key];
   }
 
+  // Old Backgrounds plays official packs with the classic theme, so show its thumbnail for them
+  function getPackThumbnail(pack) {
+    var theme = (oldBackgrounds.value && app.level.isCommunityPack(pack) == false) ? 'classic' : pack.theme;
+    return themeData[theme].thumbnail;
+  }
+
   function getThumbnail(key) {
     return app.storage.getThumbnail(key);
   }
@@ -202,7 +210,7 @@
             <template v-for="pack in packs" :key="pack.title">
               <li>
                 <button :class="{ selected: selectedPack.title == pack.title }" @click="selectPack(pack)">
-                  <img v-if="pack.theme" :src="themeData[pack.theme].thumbnail" :alt="pack.title" />
+                  <img v-if="pack.theme" :src="getPackThumbnail(pack)" :alt="pack.title" />
                   <span>{{ pack.title }}</span>
                 </button>
               </li>
@@ -680,6 +688,32 @@
         transform: translate(50%, -50%);
         width: 2em;
       }
+    }
+  }
+  // Flat Style: settings menu styling from theme variables (set in App.applyThemeStyles)
+  :root[data-theme-flat-style="true"] .level-selector {
+    *, *::after { border-radius: calc(var(--theme-corner-scale) * 0.5em); }
+
+    .level-selector__container {
+      background-color: var(--theme-bg-color-2) !important; // Beats the pack colour set inline
+
+      ul li button {
+        background-color: var(--theme-control-color);
+
+        &.selected { background-color: var(--theme-bg-color-2); } // Joins the panel, like the selected settings tab
+      }
+
+      .level-selector__levels {
+        .level-selector__levels-header .level-selector__search { background-color: var(--theme-control-color); }
+        .level-selector__levels-list .material-symbols-rounded { color: var(--theme-control-text-color); }
+      }
+
+      .level-selector__info .level-selector__info-content {
+        .level-selector__info-details { background-color: var(--theme-bg-color-3); } // Inner group, like settings
+        .level-selector__info-details ul li a, button { background-color: var(--theme-control-color); }
+      }
+
+      .level-selector__close { background-color: var(--theme-control-color); color: var(--theme-control-text-color); }
     }
   }
 </style>
