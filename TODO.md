@@ -1,11 +1,6 @@
 # Bugs
 - Mimic old UI properly
   - Mimic bubble theme properly
-- Level editor settings aren't available in all settings menus
-- FPS/pos indicator setting not saved across sessions
-- Duplicate level names in carousel
-- Can return to main menu when popup is open in level editor
-- Up arrow key scrolling up on multiplayer chat
 
 # Level editor improvements
 - Organize level properties in level file
@@ -23,6 +18,7 @@
 - Better platformer friction
 
 # Settings
+- Move level editor settings to own tab
 - External resources
   - Level packs
   - Skins

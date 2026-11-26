@@ -131,6 +131,7 @@
         }
         else {
           var jumpKeys = ['Space', 'Enter', 'ArrowUp', 'KeyW'];
+          if (e.code == 'ArrowUp') e.preventDefault(); // Don't also scroll the multiplayer chat
           if (isInputEnabled.value === true && jumpKeys.indexOf(e.code) > -1) {
             // Jump if one of the keys is pressed
             app.player.jump();

@@ -60,19 +60,17 @@
         <input type="range" id="autosave" data-setting="levelEditor.autosave" min="0" max="20" step="1" :value="settings.levelEditor.autosave" @input="$emit('updateSettings', $event)">
         <label for="autosave">{{ settings.levelEditor.autosave == 0 ? i18n.t('settings.general.autosave_off') : i18n.t('settings.general.autosave_minutes', { n: settings.levelEditor.autosave }) }}</label>
       </div>
-      <template v-if="app.state == 'level-manager' || app.state == 'level-editor'">
-        <div class="option">
-          <label for="snap">{{ i18n.t('settings.general.snap') }}</label>
-        </div>
-        <div class="option">
-          <input type="range" id="snap" data-setting="levelEditor.snap" min="0" max="16" step="4" :value="settings.levelEditor.snap" @input="onSnapChange($event)">
-          <label for="snap">{{ settings.levelEditor.snap }}</label>
-        </div>
-        <div class="option">
-          <input type="checkbox" id="visualGrid" data-setting="levelEditor.visualGrid" :checked="settings.levelEditor.visualGrid == true" @change="$emit('updateSettings', $event)">
-          <label for="visualGrid">{{ i18n.t('settings.general.visual_grid') }}</label>
-        </div>
-      </template>
+      <div class="option">
+        <label for="snap">{{ i18n.t('settings.general.snap') }}</label>
+      </div>
+      <div class="option">
+        <input type="range" id="snap" data-setting="levelEditor.snap" min="0" max="16" step="4" :value="settings.levelEditor.snap" @input="onSnapChange($event)">
+        <label for="snap">{{ settings.levelEditor.snap }}</label>
+      </div>
+      <div class="option">
+        <input type="checkbox" id="visualGrid" data-setting="levelEditor.visualGrid" :checked="settings.levelEditor.visualGrid == true" @change="$emit('updateSettings', $event)">
+        <label for="visualGrid">{{ i18n.t('settings.general.visual_grid') }}</label>
+      </div>
       <div class="option">
         <input type="checkbox" id="disableTextboxes" data-setting="general.disableTextboxes" :checked="settings.general.disableTextboxes == true" @change="$emit('updateSettings', $event)">
         <label for="disableTextboxes">{{ i18n.t('settings.general.disable_textboxes') }}</label>

@@ -16,15 +16,22 @@
   }
 
   function keydown(e) {
-    if (props.modelValue == true && e.code === 'Escape') close();
+    if (props.modelValue != true) return;
+    var isTyping = e.target.tagName == 'INPUT' || e.target.tagName == 'TEXTAREA';
+    if (e.code === 'Escape' || (e.code === 'KeyE' && !isTyping)) {
+      // Close popup, and stop the key reaching the page underneath (ex: Escape/E exiting the level editor)
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      close();
+    }
   }
 
   onMounted(function() {
-    window.addEventListener('keydown', keydown);
+    window.addEventListener('keydown', keydown, true); // Capture phase runs before page key handlers, like Settings.vue
   });
 
   onUnmounted(function() {
-    window.removeEventListener('keydown', keydown);
+    window.removeEventListener('keydown', keydown, true);
   });
 </script>
 

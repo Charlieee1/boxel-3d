@@ -421,63 +421,69 @@ class Level extends Group {
     return themes[name];
   }
 
-  getPackTheme(title) {
+  getPackTheme(title, target = null) {
     // Loop through levels json
     var theme;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) theme = themes[pack.theme];
+        if (target != null ? level === target : title == level.title) theme = themes[pack.theme];
       })
     });
     return theme;
   }
 
-  getDescriptionByTitle(title) {
+  getDescriptionByTitle(title, target = null) {
     var description;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) description = level.description;
+        if (target != null ? level === target : title == level.title) description = level.description;
       })
     });
     return description;
   }
 
-  getAuthorByTitle(title) {
+  getAuthorByTitle(title, target = null) {
     var author;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) author = level.author;
+        if (target != null ? level === target : title == level.title) author = level.author;
       })
     });
     return author;
   }
 
-  isFromCommunityPack(title) {
+  isFromCommunityPack(title, target = null) {
     // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
     var communityPack = levels.packs.find(pack => pack.title === 'Level Packs');
     if (communityPack == null) return false;
+    if (target != null) return communityPack.levels.includes(target); // Exact level, titles can be duplicated
     return communityPack.levels.some(level => level.title === title);
   }
 
-  getLevelIndex(title) {
+  getLevelIndex(title, target = null) {
     var count = 0;
     var index = -1;
-    
+
     // Loop through packs array
     levels.packs.forEach(function(pack) {
       // Loop through each levels array
       pack.levels.forEach(function(level) {
-        // Set level index and increment count
-        if (title == level.title) {
+        // Set level index and increment count, a target level object is matched exactly (titles can be duplicated)
+        if (target != null ? level === target : title == level.title) {
           index = count;
         }
         count++;
       });
     });
     return index;
+  }
+
+  // Inverse of getLevelIndex(), returns the level entry at a flattened index across all packs
+  getLevelByIndex(index) {
+    return levels.packs.flatMap(pack => pack.levels)[index];
   }
 }
 

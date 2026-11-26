@@ -687,14 +687,15 @@ class App {
 
       var storageSettings = this.storage.getSettings();
       var title = options.json.name;
-      var description = this.level.getDescriptionByTitle(title)
-      var author = this.level.getAuthorByTitle(title);
+      var source = options.source; // Exact level entry played from a menu, title lookups can't tell duplicates apart
+      var description = this.level.getDescriptionByTitle(title, source)
+      var author = this.level.getAuthorByTitle(title, source);
       var theme = this.level.getTheme(options.json.theme);
       var zoom = options.json.zoom || storageSettings.invalidatingSettings.zoom;
-      if (theme == null) theme = this.level.getPackTheme(title);
+      if (theme == null) theme = this.level.getPackTheme(title, source);
       if (theme == null) theme = app.level.getTheme('classic');
       // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
-      if (storageSettings.theme.oldBackgrounds == true && this.level.isFromCommunityPack(title) === false) theme = app.level.getTheme('classic');
+      if (storageSettings.theme.oldBackgrounds == true && this.level.isFromCommunityPack(title, source) === false) theme = app.level.getTheme('classic');
       app.level.entityFactory.color = theme.color;
       app.camera.position.z = zoom;
       app.camera.position.zDefault = zoom;

@@ -743,6 +743,7 @@
           app.player.restart();
         }
         else {
+          if (e.code == 'ArrowUp') e.preventDefault(); // Don't also scroll the multiplayer chat
           if (isInputEnabled.value === true && jumpKeys.includes(e.code)) {
             // Jump if one of the keys is pressed
             app.player.jump();

@@ -150,11 +150,13 @@
   }
 
   async function playSelectedLevel() {
-    await app.playLevel({ ...selectedLevel.value });
+    // Popup levels are copies in pack order, so their index finds the exact level entry (titles can be duplicated)
+    const index = levels.value.indexOf(selectedLevel.value);
+    await app.playLevel({ ...selectedLevel.value, source: app.level.getLevelByIndex(index) });
     window.dispatchEvent(new CustomEvent('setPage', { detail: 'campaign' }));
 
     // Update progress
-    const progress = levels.value.findIndex(level => level.title == selectedLevel.value.title) + 1;
+    const progress = index + 1;
     const settings = app.storage.getSettings();
     settings.selectedLevel = progress;
     app.updateSettings(settings);

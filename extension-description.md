@@ -11,6 +11,11 @@ Changelog:
 
 v2.9.4-m1.2.4
 Re-enabled checkpoint glitch
+Fixed bugs:
+- Settings menu wasn't consistent across all menus
+- Stats setting wasn't saved across sessions
+- Duplicate level names in the carousel caused problems with indexing
+- Up arrow scrolled multiplayer chat
 
 v2.9.4-m1.2.3
 Fixed deterministic mode

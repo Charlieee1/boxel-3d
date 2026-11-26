@@ -954,7 +954,8 @@
   {
     "version": "2.9.4-m1.2.4",
     "revisions": [
-      "Re-enabled checkpoint glitch"
+      "Re-enabled checkpoint glitch",
+      "Fixed bugs"
     ]
   }
 ]

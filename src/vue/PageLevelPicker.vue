@@ -1,5 +1,5 @@
 <script setup>
-  import { ref, onBeforeMount, onMounted, onUnmounted } from 'vue';
+  import { ref, toRaw, onBeforeMount, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Utility } from '../js/Utility.js';
   import ButtonSettings from './ButtonSettings.vue';
@@ -33,7 +33,7 @@
   }
 
   async function playSelectedItem() {
-    await app.playLevel({ ...selectedItem.value });
+    await app.playLevel({ ...selectedItem.value, source: toRaw(selectedItem.value) });
     emit('setPage', 'campaign');
   }
 
@@ -58,13 +58,13 @@
     else if (selectedItem.value == e.detail) playSelectedItem();
     selectedItem.value = e.detail;
     settings = app.storage.getSettings();
-    settings.selectedLevel = app.level.getLevelIndex(selectedItem.value.title) + 1;
+    settings.selectedLevel = app.level.getLevelIndex(selectedItem.value.title, toRaw(selectedItem.value)) + 1;
     app.updateSettings(settings);
     updateDescription();
   }
 
   function updateDescription() {
-    var index = app.level.getLevelIndex(selectedItem.value.title);
+    var index = app.level.getLevelIndex(selectedItem.value.title, toRaw(selectedItem.value));
     var count = 0;
 
     // Loop through packs array

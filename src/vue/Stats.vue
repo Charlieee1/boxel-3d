@@ -5,7 +5,7 @@
   var prevTime = Date.now();
   var running = false;
   var frames = 0;
-  var mode = ref(app?.stats?.mode || 'fps');
+  var mode = ref(app.storage.getSettings().graphics.statsMode || 'fps');
   var fps = ref(0);
   var position = ref('');
   var coordinates = computed(() => {
@@ -59,8 +59,10 @@
     if (mode.value == 'fps') mode.value = 'position'; 
     else mode.value = 'fps';
     
-    // Store stats mode in global memory
-    app.stats = Object.assign(app.stats || {}, { mode: mode.value });
+    // Store stats mode in settings so it persists across sessions
+    var settings = app.storage.getSettings();
+    settings.graphics.statsMode = mode.value;
+    app.updateSettings(settings);
   }
 
   onMounted(function() {

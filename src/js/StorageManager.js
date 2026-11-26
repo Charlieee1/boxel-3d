@@ -287,7 +287,8 @@ class StorageManager {
         cameraRotation: true,
         quality: 10,
         scale: 1,
-        stats: false
+        stats: false,
+        statsMode: 'fps'
       },
       general: {
         deathParticleColour: '#dc265a',
