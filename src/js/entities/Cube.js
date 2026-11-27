@@ -2,9 +2,15 @@ import { BoxGeometry, Group, LineSegments, Mesh, MeshPhongMaterial, PointLight }
 import { Bodies, Body, Sleeping, Vector, Vertices } from 'matter-js';
 import { Shapes } from './Shapes.js';
 
+// Deterministic mode flag from cached settings, false until the app exists (Cube's constructor can run first)
+function isDeterministicMode() {
+  return typeof app !== 'undefined' && app.storage != null && app.storage.readSettings().invalidatingSettings.deterministic === true;
+}
+
 class Cube extends Mesh {
   constructor(options = {}) {
     super();
+    this.material.visible = false; // This Mesh only groups the block's parts, its own empty geometry is never drawn
 
     // Update null values
     options.x = (options.x == null) ? 0 : options.x;
@@ -69,7 +75,7 @@ class Cube extends Mesh {
     }
 
     // Deterministic mode runs this per physics tick from App.updateOutOfBounds instead
-    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    var isDeterministic = isDeterministicMode();
     if (!isDeterministic) this.checkOutOfBounds(this.position.y);
 
     // Update helper
@@ -116,9 +122,11 @@ class Cube extends Mesh {
   setColors(color, updateOrigin = true) {
     this.color = color; // Update last color
     this.shapes.setColors(color, updateOrigin);
+    if (updateOrigin == false) this.hasTemporaryLook = true; // deselectLevel() restores it
   }
 
   setOpacity(value, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     this.opacity = Math.max(0, Math.min(1, parseFloat(value))); // Clamp to [0,1]
     this.shapes.setOpacities(this.opacity);
 
@@ -134,8 +142,13 @@ class Cube extends Mesh {
             if (node.userData.opacityMaterialCloned !== true) {
               node.material = node.material.clone();
               node.userData.opacityMaterialCloned = true;
+              node.userData.transparentOrigin = node.material.transparent; // Kept for textures that need it
             }
-            node.material.transparent = true;
+            var transparent = node.userData.transparentOrigin === true || this.opacity < 1;
+            if (node.material.transparent !== transparent) {
+              node.material.transparent = transparent;
+              node.material.needsUpdate = true; // Opaque and transparent use different shader variants
+            }
             node.material.opacity = this.opacity;
           }
         });
@@ -154,6 +167,7 @@ class Cube extends Mesh {
   }
 
   setDeathBlock(value, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     this.isDeathBlock = value === true;
     // Cube-only: subclasses (Control, Tip, Resize, etc.) already manage their own
     // permanent hitbox.isSensor/class for unrelated purposes - don't stomp on it here,
@@ -174,6 +188,7 @@ class Cube extends Mesh {
   }
 
   setPosition(position = {}, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     // Set null values
     position.x = (position.x == null) ? this.position.x : position.x;
     position.y = (position.y == null) ? this.position.y : position.y;
@@ -190,7 +205,7 @@ class Cube extends Mesh {
     // out, every reset was silently inexact by a session-dependent amount. Re-applying with the fresh
     // residual delta always converges exactly (verified: 0 failures in 1M randomized trials, never
     // needs more than one correction). Non-deterministic mode keeps the original single-pass behavior.
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
+    if (isDeterministicMode()) {
       if (this.body.position.x !== position.x || this.body.position.y !== -position.y) {
         Body.setPosition(this.body, { x: position.x, y: -position.y });
       }
@@ -211,6 +226,7 @@ class Cube extends Mesh {
   }
 
   setRotation(rotation, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     if (typeof rotation == 'object') {
       this.rotation.x = rotation.x;
       this.rotation.y = rotation.y;
@@ -231,7 +247,7 @@ class Cube extends Mesh {
   // Non-deterministic mode keeps the original single-pass behavior.
   setBodyAngle(targetAngle) {
     Body.setAngle(this.body, targetAngle);
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
+    if (isDeterministicMode()) {
       if (this.body.angle !== targetAngle) {
         Body.setAngle(this.body, targetAngle);
       }
@@ -253,6 +269,7 @@ class Cube extends Mesh {
   }
 
   setScale(scale = {}, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     // Resolve null values
     scale.x = (scale.x == null) ? this.scale.x : scale.x;
     scale.y = (scale.y == null) ? this.scale.y : scale.y;
@@ -262,7 +279,7 @@ class Cube extends Mesh {
     // that can happen before App.vue finishes `window.app = new App()` (ex: App's constructor building
     // its own initial player). Treat "app not ready yet" as non-deterministic (doesn't matter which
     // branch runs at construction time anyway - this.rotation.z and this.body.angle are still in sync).
-    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    var isDeterministic = isDeterministicMode();
 
     // Deterministic mode: skip the body-scale round trip entirely when x/y aren't actually changing -
     // Matter's Body.scale() recomputes vertices/inertia/part position via a point-relative transform
@@ -314,6 +331,7 @@ class Cube extends Mesh {
   }
 
   setForceDirection(force = { x: 0, y: 0 }, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     // Resolve null values
     this.force = force;
     if (updateOrigin == true) { this.setForceDirectionOrigin(force); }
@@ -345,7 +363,7 @@ class Cube extends Mesh {
     // (keyed on bounds.min.x) between a reused and a fresh body, changing collision resolution order for
     // anything with simultaneous/overlapping contacts. Non-deterministic mode keeps the original
     // unconditional-zero-at-the-end ordering untouched, so vanilla physics is bit-for-bit unaffected.
-    if ((typeof app !== 'undefined' && app.storage) && app.storage.getSettings().invalidatingSettings.deterministic === true) {
+    if (isDeterministicMode()) {
       Body.setVelocity(this.body, { x: 0, y: 0 });
       Body.setAngularVelocity(this.body, 0);
     }
@@ -407,7 +425,7 @@ class Cube extends Mesh {
   // offset/differently-sized sensors, static bodies, and - the scenario that exposed this bug -
   // multiple repeated calls reusing the cached template with no drift in between.
   resyncBodyGeometry() {
-    if ((typeof app === 'undefined' || !app.storage) || app.storage.getSettings().invalidatingSettings.deterministic !== true) return;
+    if (!isDeterministicMode()) return;
     if (this.body.isStatic === true) return;
 
     var targetPosition = { x: this.body.position.x, y: this.body.position.y };
@@ -463,6 +481,7 @@ class Cube extends Mesh {
   }
 
   setStatic(isStatic = true, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     // Matter's Body.setStatic isn't idempotent: calling it with the body's CURRENT isStatic state
     // overwrites its saved "_original" mass/inertia with the current (already Infinity, if static)
     // values, permanently corrupting them - a later un-static call then restores Infinity mass,
@@ -470,7 +489,11 @@ class Cube extends Mesh {
     // same constraint make Constraint.solve divide 0/0 (NaN), which then spreads to every other body
     // sharing a constraint with either of them. Guard against no-op calls so _original never corrupts.
     if (this.body.isStatic !== isStatic) Body.setStatic(this.body, isStatic);
-    if (updateOrigin == true) this.setStaticOrigin(isStatic);
+    if (updateOrigin == true) {
+      var changed = this.isStaticOrigin !== isStatic;
+      this.setStaticOrigin(isStatic);
+      if (changed && this.parent && this.parent.isLevel === true) this.parent.invalidateStatics(); // Moves between the level's static and moving lists
+    }
   }
 
   setStaticOrigin(isStatic) {
@@ -488,6 +511,7 @@ class Cube extends Mesh {
   }
 
   setFriction(friction = 0.1, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     this.body.friction = parseFloat(friction);
     if (updateOrigin == true) this.setFrictionOrigin(friction);
   }
@@ -501,10 +525,11 @@ class Cube extends Mesh {
   }
 
   setMode(mode, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     mode = (mode == null) ? 'default' : mode;
     this.mode = mode;
     if (updateOrigin == true) this.setModeOrigin(mode);
-    window.dispatchEvent(new CustomEvent('setMode', { detail: mode }));
+    if (this.body.class == 'player') window.dispatchEvent(new CustomEvent('setMode', { detail: mode })); // Only the player's mode drives the UI, every block resetting used to fire this
   }
 
   setModeOrigin(mode) {
@@ -512,10 +537,11 @@ class Cube extends Mesh {
   }
 
   setJumpMode(mode, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     mode = (mode == null) ? 'limited' : mode;
     this.jumpMode = mode;
     if (updateOrigin == true) this.setJumpModeOrigin(mode);
-    window.dispatchEvent(new CustomEvent('setJumpMode', { detail: mode }));
+    if (this.body.class == 'player') window.dispatchEvent(new CustomEvent('setJumpMode', { detail: mode }));
   }
 
   setJumpModeOrigin(mode) {
@@ -534,6 +560,7 @@ class Cube extends Mesh {
 
   select(state = true) {
     this.selected = state;
+    this.hasTemporaryLook = state; // Deselecting restores the original look
     if (state == true) {
       this.shapes.setColors('#ffffff', false);
       this.shapes.setOpacities(0.9);
@@ -598,7 +625,13 @@ class Cube extends Mesh {
     }
   }
 
+  // Tells the level a gameplay change was made, so its next reset restores this object
+  markModified() {
+    if (this.parent && this.parent.isLevel === true) this.parent.markModified(this);
+  }
+
   freeze(state = true) {
+    this.markModified();
     this.body.collisionFilter.category = (state == true) ? 0 : 1;
     Sleeping.set(this.body, state);
   }

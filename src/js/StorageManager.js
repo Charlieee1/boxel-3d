@@ -14,6 +14,8 @@ class StorageManager {
     this.thumbnailDB = this.openThumbnailDB();
     var loaded = this.migrateLocalThumbnails().then(() => this.loadThumbnails()).catch(err => console.error(err));
     this.thumbnailsReady = Promise.race([loaded, new Promise(resolve => setTimeout(resolve, 5000))]); // Never block startup on a stuck database
+    this.cachedSettings = null; // Parsed settings shared by readSettings(), cleared whenever stored settings change
+    window.addEventListener('storage', e => { if (e.key == null || e.key == 'settings') this.invalidateSettings(); }); // Saved from another tab
   }
 
   // Resolves to null when IndexedDB is unavailable, thumbnails then fall back to localStorage
@@ -113,6 +115,7 @@ class StorageManager {
       if (key.indexOf(this.thumbnailPrefix) == 0) thumbnails.push([key.slice(this.thumbnailPrefix.length), data[key]]);
       else localStorage.setItem(key, data[key]);
     });
+    this.invalidateSettings();
     this.onDataImported(); // Convert before awaiting, so nothing can read unconverted settings
     app.updateSettings(null); // Apply imported settings, including the theme
     window.dispatchEvent(new CustomEvent('settingsImported'));
@@ -140,6 +143,7 @@ class StorageManager {
     var settings = JSON.parse(stored);
     settings.lastSaved = Date.now();
     localStorage.setItem('settings', JSON.stringify(settings));
+    this.invalidateSettings();
   }
 
   getListOfLevels() {
@@ -248,7 +252,24 @@ class StorageManager {
     }
     settings.lastSaved = Math.max(Date.now(), storedLastSaved + 1);
     localStorage.setItem('settings', JSON.stringify(settings));
+    this.invalidateSettings();
     return true;
+  }
+
+  invalidateSettings() {
+    this.cachedSettings = null;
+  }
+
+  // Shared parsed settings for hot paths, callers must never modify the returned object
+  readSettings() {
+    if (this.cachedSettings == null) this.cachedSettings = this.loadSettings();
+    return this.cachedSettings;
+  }
+
+  // Private copy that callers can modify and pass back to setSettings()
+  getSettings() {
+    var settings = this.readSettings();
+    return typeof structuredClone === 'function' ? structuredClone(settings) : JSON.parse(JSON.stringify(settings));
   }
 
   // Recursively copy keys missing from target, plain objects only
@@ -263,7 +284,7 @@ class StorageManager {
     return target;
   }
 
-  getSettings() {
+  loadSettings() {
     var util = new Utility();
     var storageSettings = localStorage.getItem('settings');
     var defaultSettings = {

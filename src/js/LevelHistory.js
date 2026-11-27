@@ -4,6 +4,7 @@ class LevelHistory {
   }
 
   save(description = "Edited level") {
+    app.level.invalidateStatics(); // Every edit lands here, so blocks may have moved: rebuild culling grids and fully reset next time
     this.history.length = this.historyIndex + 1; // Alt splice
     this.history.push({ 
       'data': app.level.exportToJSON(),

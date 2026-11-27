@@ -9,6 +9,9 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.4-m1.3.0
+- Optimized game
+
 v2.9.4-m1.2.4
 - Re-enabled checkpoint glitch
 - Fixed bug: Settings menu wasn't consistent across all menus

@@ -67,8 +67,10 @@ class Graphics {
   }
 
   render() {
-    this.composer.render();
-    this.rendererCSS.render(this.scene, this.camera);
+    // With every post-processing pass off, skip the composer's offscreen render and extra full-screen copy
+    if (this.outlinePass.enabled || this.smaaPass.enabled) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
+    this.rendererCSS.render(this.cssScene || this.scene, this.camera); // Only walks the objects that can hold text labels
   }
 
   resize() {

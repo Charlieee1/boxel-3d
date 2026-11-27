@@ -1,8 +1,29 @@
 import { Group } from 'three';
-import { Constraint, World } from 'matter-js';
+import { Composite, Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
 import { convertLevel } from './LevelCompatibility.js';
+
+// Every number a reset can rewrite on a body and its parts, to tell whether a reset changed anything
+function getBodyState(body) {
+  var state = [body.positionPrev.x, body.positionPrev.y, body.anglePrev, body.velocity.x, body.velocity.y, body.speed, body.angularVelocity, body.angularSpeed, body.circleRadius];
+  for (var i = 0; i < body.parts.length; i++) {
+    var part = body.parts[i];
+    state.push(part.position.x, part.position.y, part.angle, part.area, part.mass, part.inverseMass, part.density, part.inertia, part.inverseInertia);
+    state.push(part.bounds.min.x, part.bounds.min.y, part.bounds.max.x, part.bounds.max.y);
+    for (var j = 0; j < part.vertices.length; j++) state.push(part.vertices[j].x, part.vertices[j].y);
+    for (var k = 0; k < part.axes.length; k++) state.push(part.axes[k].x, part.axes[k].y);
+  }
+  return state;
+}
+
+function isSameBodyState(a, b) {
+  if (a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (!Object.is(a[i], b[i])) return false; // Signed zeros count as different, to stay exact
+  }
+  return true;
+}
 
 class Level extends Group {
   constructor() {
@@ -16,6 +37,59 @@ class Level extends Group {
     this.disableManualCheckpointRespawn = false;
     this.levelUIText = '';
     this.author = ''; // Overrides the level pack's author when set
+    this.isLevel = true;
+    this.helpers = new Group(); // Hitbox helpers of z=0 blocks, added to the scene next to the level
+    this.helpers.visible = false;
+    this.dynamicObjects = []; // Children that can move (or have no body), always reset and updated
+    this.dynamicObjectsDirty = true;
+    this.modifiedObjects = new Set(); // Static objects changed during play, the only statics a minimal reset touches
+    this.driftingObjects = new Set(); // Static objects a non-deterministic reset still changes (see resetLevel)
+    this.resetMode = null; // Deterministic setting of the last reset
+    this.needsFullReset = true; // Next reset touches every child (level loaded or edited)
+    this.staticVersion = 0; // Bumped whenever static objects are added, removed, moved or edited
+    this.addEventListener('childadded', e => this.onChildAdded(e.child));
+    this.addEventListener('childremoved', e => this.onChildRemoved(e.child));
+  }
+
+  // Static at its origin, so it only moves if gameplay changes it (and marks it modified)
+  isStaticChild(child) {
+    if (child.body == null) return false;
+    return (child.isStaticOrigin != null ? child.isStaticOrigin : child.body.isStatic) === true;
+  }
+
+  onChildAdded(child) {
+    if (this.isStaticChild(child)) this.invalidateStatics();
+    else if (this.dynamicObjectsDirty == false) this.dynamicObjects.push(child);
+  }
+
+  onChildRemoved(child) {
+    this.modifiedObjects.delete(child);
+    this.driftingObjects.delete(child);
+    if (this.isStaticChild(child)) this.invalidateStatics();
+    else if (this.dynamicObjectsDirty == false) {
+      var index = this.dynamicObjects.indexOf(child);
+      if (index >= 0) this.dynamicObjects.splice(index, 1);
+    }
+  }
+
+  // Static objects changed outside of gameplay (load, editor), so rebuild lists, grids and do a full reset
+  invalidateStatics() {
+    this.staticVersion++;
+    this.dynamicObjectsDirty = true;
+    this.needsFullReset = true;
+  }
+
+  // A static object was changed by gameplay, so the next reset has to restore it
+  markModified(object) {
+    if (this.isResetting !== true && object.parent === this && this.isStaticChild(object)) this.modifiedObjects.add(object);
+  }
+
+  getDynamicObjects() {
+    if (this.dynamicObjectsDirty == true) {
+      this.dynamicObjects = this.children.filter(child => !this.isStaticChild(child));
+      this.dynamicObjectsDirty = false;
+    }
+    return this.dynamicObjects;
   }
 
   addObject(object) {
@@ -25,30 +99,46 @@ class Level extends Group {
     // Update body state (-1 == active physics)
     if (object.position.z == 0) {
       World.add(app.engine.world, object.body); // Add hitbox to world
-      this.parent.add(object.helper);
+      this.helpers.add(object.helper);
     }
-    
+
     // Add to group and compute world matrix once (scene.matrixWorldAutoUpdate is off)
     this.add(object);
     object.updateMatrixWorld();
-    object.helper.visible = app.storage.getSettings().invalidatingSettings.hitboxes === true; // New blocks follow debug mode
+    var hitboxes = app.storage.readSettings().invalidatingSettings.hitboxes === true;
+    object.helper.visible = hitboxes; // New blocks follow debug mode
+    this.helpers.visible = hitboxes;
     object.updateHelper();
   }
 
-  removeObject(object, override = false) {
+  removeObject(object, override = false, deselect = true) {
     // Prevent deleting the player
     if ((app.selectedObject != null && app.selectedObject.getClass() != 'player') || override == true) {
       if (object != undefined) {
         World.remove(app.engine.world, object.body);
-        this.parent.remove(object.helper);
+        if (object.helper) object.helper.removeFromParent();
         this.remove(object);
-        this.deselectLevel();
+        if (object !== app.player) this.disposeObject(object);
+        if (deselect == true) this.deselectLevel();
       }
     }
   }
 
+  // Frees GPU memory the object created itself, model geometry and materials shared between blocks are kept
+  disposeObject(object) {
+    var dispose = function(node) {
+      if (node.geometry) node.geometry.dispose();
+      if (node.material) node.material.dispose();
+    };
+    if (object.shapes) object.shapes.children.forEach(dispose);
+    if (object.helper) object.helper.traverse(dispose);
+    object.traverse(function(node) {
+      if (node.userData.opacityMaterialCloned === true) node.material.dispose(); // Per-block copy made by setOpacity()
+    });
+    dispose(object);
+  }
+
   clearLevel() {
-    var length = this.children.length;
     this.name = this.defaultName;
     this.theme = this.defaultTheme;
     this.defaultBlockColor = null;
@@ -63,10 +153,32 @@ class Level extends Group {
       app.levelEditor.tempSpawnPosition = null;
       app.levelEditor.tempSpawnRotation = null;
     }
-    for (var i=0; i < length; i++) {
-      var child = this.children[0];
-      this.removeObject(child, true);
-    }
+    this.removeAllObjects();
+    this.deselectLevel();
+  }
+
+  // Same as removeObject() on every child, in one pass (removing one at a time shifts whole arrays each time, quadratic on big levels)
+  removeAllObjects() {
+    var children = this.children.slice();
+    var bodies = new Set();
+    children.forEach(child => { if (child.body) bodies.add(child.body); });
+    var world = app.engine.world;
+    world.bodies = world.bodies.filter(body => !bodies.has(body)); // Bodies added by anything else (mods) stay
+    Composite.setModified(world, true, true, false);
+
+    var detach = function(parent, child) {
+      child.parent = null;
+      child.dispatchEvent({ type: 'removed' });
+      parent.dispatchEvent({ type: 'childremoved', child: child });
+    };
+    var helpers = this.helpers.children.slice();
+    this.helpers.children.length = 0;
+    helpers.forEach(helper => detach(this.helpers, helper));
+    this.children.length = 0;
+    children.forEach(child => {
+      detach(this, child);
+      if (child !== app.player) this.disposeObject(child);
+    });
   }
 
   // Attempts to link exactly one pair of blocks whose nearest ends coincide (within 1e-6, float-rounding
@@ -153,13 +265,11 @@ class Level extends Group {
   }
 
   removeParticles() {
-    var length = this.children.length;
-    var index = length - 1;
-    while (index >= 0) {
-      var child = this.children[index];
-      if (child.isParticle != null) this.removeObject(child, true);
-      index--;
-    }
+    // Particles are always dynamic, so only the dynamic list needs searching
+    var particles = this.getDynamicObjects().filter(child => child.isParticle != null);
+    particles.forEach(particle => this.removeObject(particle, true, false));
+    var hasSelection = app.selectedObject != null || this.children.some(child => child.selected === true);
+    if (particles.length > 0 && hasSelection) this.deselectLevel(); // Once, and only if something is selected
   }
 
   refreshLevel() {
@@ -215,7 +325,8 @@ class Level extends Group {
     app.selectedObject = null;
     for (var i=0; i < this.children.length; i++) {
       var child = this.children[i];
-      if (child.body != null) {
+      // Untouched blocks already have their original look, so skip them (this runs on many editor clicks)
+      if (child.body != null && (child.selected === true || child.hasTemporaryLook === true)) {
         child.select(false);
       }
     }
@@ -267,7 +378,7 @@ class Level extends Group {
 
     // Loop through JSON level data
     for (var i = 0; i < levelData.children.length; i++) {
-      var settings = app.storage.getSettings();
+      var settings = app.storage.readSettings();
       var objectData = levelData.children[i];
       var object = this.entityFactory.createObject(objectData.class);
       if (objectData.class == 'player') {
@@ -280,13 +391,33 @@ class Level extends Group {
     }
   }
 
+  // Static objects changed since the last reset, then everything that moves (the player last, so its mode event wins)
+  getMinimalResetObjects(isDeterministic) {
+    var statics = new Set(this.modifiedObjects);
+    if (!isDeterministic) this.driftingObjects.forEach(object => statics.add(object)); // Old resets still nudge these, so keep applying them
+    var objects = Array.from(statics);
+    var dynamics = this.getDynamicObjects();
+    for (var i = 0; i < dynamics.length; i++) {
+      if (dynamics[i] !== app.player) objects.push(dynamics[i]);
+    }
+    if (app.player.parent === this) objects.push(app.player);
+    return objects;
+  }
+
   resetLevel() {
     // Reset counter read by tools/determinism-test to split recordings into attempts
     window.__detAttempt = (window.__detAttempt == null) ? 0 : window.__detAttempt + 1;
 
-    // Gets called every time the level starts (including checkpoints)
-    for (var i = 0; i < this.children.length; i++) {
-      var child = this.children[i];
+    // Gets called every time the level starts (including checkpoints), only moving and changed objects need it once the level has been fully reset
+    var isDeterministic = app.storage.readSettings().invalidatingSettings.deterministic === true;
+    if (this.resetMode !== isDeterministic) this.needsFullReset = true; // Drift tracking only holds for the mode it was measured in
+    var isFullReset = this.needsFullReset;
+    var resetObjects = isFullReset ? this.children.slice() : this.getMinimalResetObjects(isDeterministic);
+    if (isFullReset) this.driftingObjects.clear();
+    this.isResetting = true; // Restoring origins isn't a gameplay change
+    for (var i = 0; i < resetObjects.length; i++) {
+      var child = resetObjects[i];
+      var before = (!isDeterministic && this.isStaticChild(child)) ? getBodyState(child.body) : null;
       // A throw from any one child (ex: a bad resyncBodyGeometry() case) must not abort the loop -
       // every later child would silently stay un-reset (wrong position, stale velocity, etc), which is
       // far worse and harder to diagnose than one object being skipped. Log which one failed so it's
@@ -296,10 +427,20 @@ class Level extends Group {
         child.updateMatrixWorld();
         // Not every child has a helper (ex: Rope)
         if (child.updateHelper) child.updateHelper();
+
+        // Non-deterministic resets re-scale static bodies, which nudges some for a while: keep resetting those until a reset changes nothing
+        if (before != null) {
+          if (isSameBodyState(before, getBodyState(child.body))) this.driftingObjects.delete(child);
+          else this.driftingObjects.add(child);
+        }
       } catch (e) {
         console.error('resetLevel(): failed to reset child', child.getClass ? child.getClass() : child, e);
       }
     }
+    this.isResetting = false;
+    this.modifiedObjects.clear(); // Everything is back at its origin
+    this.needsFullReset = false;
+    this.resetMode = isDeterministic;
 
     // Every body is now at its final post-reset position - prune any activeSensorPairs entries that
     // no longer correspond to genuine contact (see Collision.reconcileAfterReset for why this is
@@ -323,12 +464,12 @@ class Level extends Group {
     // position/velocity via resetToOrigin(), but never touches positionImpulse/constraintImpulse or
     // Matter's pair cache (warm-started contact impulses), so without this, an "R" restart carries
     // that residual solver bias straight over from whatever happened before the restart.
-    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
+    if (app.storage.readSettings().invalidatingSettings.deterministic === true) {
       app.player.resetDeterministicPhysics();
     }
 
     var jumpReady = app.player.jumpReady; // resetScene() refreshes the jump, which checkpoint respawns don't get
-    app.resetScene();
+    app.resetScene(false); // Rendered once at the end instead, at the real spawn point
     window.dispatchEvent(new CustomEvent('closePopup'));
 
     // Remove checkpoint, or respawn to checkpoint
@@ -345,7 +486,7 @@ class Level extends Group {
       app.player.respawn(true);
     }
 
-    // resetScene() drew a frame at the level start - redraw at the real respawn point so it's never shown
+    // The one render of this reset, at the real respawn point
     app.updateRender({ delta: 0, alpha: 0 });
   }
 
@@ -413,6 +554,7 @@ class Level extends Group {
     this.traverse(function(obj) {
       if (obj.helper) obj.helper.visible = visible;
     });
+    this.helpers.visible = visible; // Skips the whole group while hitboxes are off
 
     // Hidden helpers aren't kept in place, so reposition them and redraw now (the loop doesn't render while paused)
     this.updateHelpers();

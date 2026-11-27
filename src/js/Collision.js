@@ -8,11 +8,12 @@ class Collision {
     // Matter's own pair cache, so it re-fires collisionStart for contacts that never actually broke;
     // this set is how deterministic mode tells that apart from a genuinely new touch
     this.activeSensorPairs = new Set();
+    this.activeSensorObjects = new Map(); // Pair key -> [sensor, other], so resets don't search the level for them
   }
 
   checkPlayerCollision(e) {
     var pairs = e.pairs;
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
 
     // Loop through pairs of collisions
     for (var pairIndex = 0; pairIndex < pairs.length; pairIndex++) {
@@ -43,6 +44,7 @@ class Collision {
               var pairKey = objectA.uuid + '|' + objectB.uuid;
               var isNewPair = !this.activeSensorPairs.has(pairKey);
               this.activeSensorPairs.add(pairKey);
+              this.activeSensorObjects.set(pairKey, [objectA, objectB]);
               var shouldTrigger = isNewPair || settings.invalidatingSettings.deterministic !== true;
 
               if (shouldTrigger) {
@@ -190,6 +192,7 @@ class Collision {
 
         if (objectA != null && objectB != null && bodyA.class == 'sensor' && bodyB.class != 'sensor') {
           this.activeSensorPairs.delete(objectA.uuid + '|' + objectB.uuid);
+          this.activeSensorObjects.delete(objectA.uuid + '|' + objectB.uuid);
         }
       }
     }
@@ -209,15 +212,23 @@ class Collision {
   reconcileAfterReset() {
     if (this.activeSensorPairs.size === 0) return;
     var stale = [];
+    var findInLevel = function(object, name) {
+      if (object != null) return object.parent === app.level ? object : null; // Same answer as searching the level, without the search
+      return app.level.getObjectByName(name);
+    };
     this.activeSensorPairs.forEach(function(key) {
       var separatorIndex = key.indexOf('|');
-      var sensorObject = app.level.getObjectByName(key.slice(0, separatorIndex));
-      var otherObject = app.level.getObjectByName(key.slice(separatorIndex + 1));
+      var objects = this.activeSensorObjects.get(key) || [];
+      var sensorObject = findInLevel(objects[0], key.slice(0, separatorIndex));
+      var otherObject = findInLevel(objects[1], key.slice(separatorIndex + 1));
       if (sensorObject == null || otherObject == null || !Bounds.overlaps(sensorObject.body.bounds, otherObject.body.bounds)) {
         stale.push(key);
       }
-    });
-    stale.forEach(function(key) { this.activeSensorPairs.delete(key); }.bind(this));
+    }.bind(this));
+    stale.forEach(function(key) {
+      this.activeSensorPairs.delete(key);
+      this.activeSensorObjects.delete(key);
+    }.bind(this));
   }
 }
 

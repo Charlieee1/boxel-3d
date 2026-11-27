@@ -13,6 +13,7 @@
 - Drawing mode (like thin build but each block is placed on each (every 5th?) mouse movement)
 - Better platformer friction
 - Say which level will be deleted in level editor popup
+- Better keybinds
 
 # Settings
 - Move level editor settings to own tab
@@ -25,6 +26,7 @@
 - Separate moving background from rotating camera
 - Change old backgrounds setting to background & default block recolour and apply to all levels
 - Clean thumbnails setting
+- Keybinds
 
 # QOL
 - Lines from teleport blocks to destinations
@@ -34,8 +36,6 @@
 - Pre-load next level
 - Make long level credits scroll
 - Random level button
-- Optimize restart/respawn for lag
-- Heavy optimizations
 
 # Extra features
 - Gravity preservation glitch working for campaign levels

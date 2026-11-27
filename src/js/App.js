@@ -11,6 +11,8 @@ import { Collision } from './Collision.js';
 import { Background } from './Background.js';
 import { Level } from './Level.js';
 import { convertLevel } from './LevelCompatibility.js';
+import { PhysicsGrid } from './PhysicsGrid.js';
+import { RenderGrid } from './RenderGrid.js';
 import { LevelHistory } from './LevelHistory.js';
 import { Player } from './entities/Player.js';
 import { Mouse } from './Mouse.js';
@@ -56,9 +58,21 @@ class App {
     this.level = new Level();
     this.levelHistory = new LevelHistory();
     this.scene.add(this.level);
-    
+    this.scene.add(this.level.helpers);
+    this.scene.add(this.player.light); // Out of the player so hiding it never changes the light count (see Player.syncLight)
+
+    // Only bodies near moving ones are collision-checked, and only what the camera sees is drawn while playing
+    this.physicsGrid = new PhysicsGrid(this.engine);
+    this.renderGrid = new RenderGrid(this.level);
+    this.scene.onBeforeRender = (renderer, scene, camera) => {
+      this.updateCameraFar(camera);
+      this.player.syncLight();
+      if (this.play == true) this.renderGrid.begin(camera);
+    };
+    this.scene.onAfterRender = () => this.renderGrid.end();
+
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 10000); // Far plane past the editor's 5000 max zoom so the level isn't clipped
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000); // Extended only for a zoomed out editor camera (see updateCameraFar)
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
@@ -101,6 +115,7 @@ class App {
     this.graphics = new Graphics(canvas);
     this.graphics.setCamera(this.camera);
     this.graphics.setScene(this.scene);
+    this.graphics.cssScene = this.multiplayer.players; // Multiplayer name tags are the only text labels in the scene
     this.graphics.setSelectedObjects([this.level]);
     
     // Initialize level editor
@@ -170,7 +185,7 @@ class App {
     // Update engine to loop engine rate
     if (this.play == true) {
       // Deterministic mode: jump buffer counts physics ticks instead of render-frame wall-clock time
-      var isDeterministic = this.storage.getSettings().invalidatingSettings.deterministic === true;
+      var isDeterministic = this.storage.readSettings().invalidatingSettings.deterministic === true;
       if (isDeterministic) this.player.updateJumpBuffer(delay);
 
       // Deterministic mode: the level timer counts physics ticks (before the step, so a finishing tick is included)
@@ -235,10 +250,11 @@ class App {
   }
 
   updateChildren(delta, alpha) {
-    // Loop through all children and update all 3D objects
-    var index = this.level.children.length - 1;
+    // Loop through the level's moving objects (static ones never move, so they're not even visited)
+    var children = this.level.getDynamicObjects();
+    var index = children.length - 1;
     while (index >= 0) {
-      var child = this.level.children[index];
+      var child = children[index];
 
       // Update child if it has a collision box (skip static objects as they don't move)
       if (child.body != null && child.isFrozen() == false && child.isStatic() == false) {
@@ -251,9 +267,10 @@ class App {
 
   // Deterministic-mode counterpart of Cube.update's out-of-bounds check, using the previous engine position
   updateOutOfBounds() {
-    var index = this.level.children.length - 1;
+    var children = this.level.getDynamicObjects();
+    var index = children.length - 1;
     while (index >= 0) {
-      var child = this.level.children[index];
+      var child = children[index];
       if (child.body != null && child.isFrozen() == false && child.isStatic() == false) child.checkOutOfBounds(-child.body.positionPrev.y);
       index--;
     }
@@ -273,17 +290,17 @@ class App {
     this.updateJumpIndicator();
   }
 
-  resetScene() {
+  resetScene(render = true) {
     app.camera.position.z = app.camera.position.zDefault;
     this.player.removeRope();
     this.level.removeParticles();
     this.level.resetLevel();
-    this.updateRender({ delta: 0, alpha: 0 }, 0);
+    if (render == true) this.updateRender({ delta: 0, alpha: 0 }, 0); // Callers that render again afterwards skip this one
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
   updateJumpIndicator() {
-    var settings = this.storage.getSettings();
+    var settings = this.storage.readSettings();
     // Only shown during live gameplay (open menus also hide it via CSS, see #jump-indicator in Main.scss)
     if (settings.invalidatingSettings.jumpIndicator !== true || this.play !== true) {
       this.jumpIndicator.classList.remove('active');
@@ -555,6 +572,17 @@ class App {
     }
   }
 
+  // Vanilla's 5000 draw distance (so far background blocks stay hidden), pushed out only when the editor camera is zoomed out past it
+  updateCameraFar(camera) {
+    var distance = camera.position.z;
+    if (this.play != true && this.levelEditor) distance = Math.max(distance, camera.position.distanceTo(this.levelEditor.controlsOrbit.target));
+    var far = Math.max(5000, distance + 1000);
+    if (camera.far !== far) {
+      camera.far = far;
+      camera.updateProjectionMatrix();
+    }
+  }
+
   updateCameraZoom(zoom) {
     // Skip camera update if level has a locked zoom
     if (this.level.zoom !== undefined) return;
@@ -582,7 +610,7 @@ class App {
     app.play = false;
     app.resetScene();
     app.level.clearLevel();
-    app.updateCameraZoom(app.storage.getSettings().invalidatingSettings.zoom); // Don't carry the level's zoom over
+    app.updateCameraZoom(app.storage.readSettings().invalidatingSettings.zoom); // Don't carry the level's zoom over
     app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     if (keepCheckpoint == false) app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
@@ -596,7 +624,7 @@ class App {
     app.player.resumeRestart(); // Continue a death respawn held by the editor's pause (fresh starts already cancelled it)
 
     // Adjust camera zoom and save a straight-on camera as the orbit reset state
-    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.zDefault = app.level.zoom || app.storage.readSettings().invalidatingSettings.zoom;
     app.camera.position.z = app.camera.position.zDefault;
     app.saveOrbitState();
 
@@ -644,7 +672,7 @@ class App {
     // Load level if json exists
     if (options.json) {
       app.player.cancelRestart(); // clear stale kill()-timer/physics-bias carryover from a prior level, same as retryLevel() does
-      if (app.storage.getSettings().invalidatingSettings.deterministic === true) app.player.resetDeterministicPhysics();
+      if (app.storage.readSettings().invalidatingSettings.deterministic === true) app.player.resetDeterministicPhysics();
 
       convertLevel(options.json);
       var storageSettings = this.storage.getSettings();
@@ -739,13 +767,13 @@ class App {
   }
 
   isInputBufferValid() {
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
     var inputBufferIsDisabled = settings.invalidatingSettings.inputBuffer === 0;
     return inputBufferIsDisabled;
   }
 
   isDebugValid() {
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
     var debugIsDisabled = settings.invalidatingSettings.hitboxes === false;
     return debugIsDisabled;
   }
@@ -759,12 +787,12 @@ class App {
   }
 
   isDeterministicValid() {
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
     return settings.invalidatingSettings.deterministic !== true;
   }
 
   isJumpIndicatorValid() {
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
     return settings.invalidatingSettings.jumpIndicator !== true;
   }
 

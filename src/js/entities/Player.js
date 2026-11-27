@@ -84,7 +84,7 @@ class Player extends Cube {
 
   update(delta, alpha) {
     // Calculate input buffer (deterministic mode does this per physics tick in updateJumpBuffer)
-    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+    var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.readSettings().invalidatingSettings.deterministic === true : false;
     if (this.jumpBuffer > 0 && !isDeterministic) {
       this.jumpBuffer -= delta; // ms
 
@@ -216,7 +216,7 @@ class Player extends Cube {
       // render-interpolated value (see Cube.update's alpha blend) that can offset the rope's anchor
       // by a wall-clock-timing-dependent amount; non-deterministic mode keeps the original
       // (interpolated) source so existing runs/records made against that behavior stay comparable.
-      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.getSettings().invalidatingSettings.deterministic === true : false;
+      var isDeterministic = (typeof app !== 'undefined' && app.storage) ? app.storage.readSettings().invalidatingSettings.deterministic === true : false;
       var originX = isDeterministic ? this.body.position.x : this.position.x;
       var originY = isDeterministic ? -this.body.position.y : this.position.y;
 
@@ -283,11 +283,25 @@ class Player extends Cube {
     app.level.remove(this.rope);
   }
 
+  // The light lives in the scene (see App) so hiding the player never changes the light count, which rebuilds every material
+  syncLight() {
+    var light = this.light;
+    if (light == null || light.parent === this) return;
+    if (this.lightIntensity == null) this.lightIntensity = light.intensity;
+    var isShown = true; // Dark whenever the player itself wouldn't be drawn, like before
+    for (var node = this; node != null; node = node.parent) {
+      if (node.visible === false || (node.parent == null && node.isScene !== true)) isShown = false;
+    }
+    light.intensity = isShown ? this.lightIntensity : 0;
+    light.position.copy(this.position);
+    light.updateMatrixWorld();
+  }
+
   kill() {
     if (this.isFrozen() == false) {
       this.freeze(true);
       this.visible = false;
-      var settings = app.storage.getSettings();
+      var settings = app.storage.readSettings();
       var isDeterministic = settings.invalidatingSettings.deterministic === true;
       // Respawn in 1 second (bypasses manual respawn gate, this is automatic); deterministic mode counts 60 ticks
       if (isDeterministic) this.killTicks = 60;

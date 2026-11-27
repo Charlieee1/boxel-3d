@@ -37,6 +37,7 @@ class Reset extends Cube {
   }
 
   setResetConfig(config, updateOrigin = true) {
+    if (updateOrigin == false) this.markModified();
     this.resetConfig = { ...this.resetConfig, ...config };
     if (updateOrigin == true) this.setResetConfigOrigin(this.resetConfig);
   }

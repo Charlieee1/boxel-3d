@@ -18,7 +18,7 @@ class Shapes extends Group {
     options.opacity = (options.opacity == null) ? 1 : options.opacity;
 
     var geometry = new BoxGeometry(options.scaleX, options.scaleY, options.scaleZ);
-    var material = new MeshPhongMaterial({ color: options.color, transparent: true });
+    var material = new MeshPhongMaterial({ color: options.color, transparent: options.opacity < 1 }); // Opaque unless see-through
     var cube = new Mesh(geometry, material);
     cube.castShadow = true;
     cube.receiveShadow = true;
@@ -43,7 +43,7 @@ class Shapes extends Group {
     options.opacity = (options.opacity == null) ? 1 : options.opacity;
 
     var geometry = new ConeGeometry((options.scaleX / 2) * 1.5, options.scaleY, options.segments);
-    var material = new MeshPhongMaterial({ color: options.color, flatShading: true, transparent: true });
+    var material = new MeshPhongMaterial({ color: options.color, flatShading: true, transparent: options.opacity < 1 });
     var cone = new Mesh(geometry, material);
     cone.castShadow = true;
     cone.receiveShadow = true;
@@ -83,7 +83,7 @@ class Shapes extends Group {
       bevelThickness: 0 // Default = 0.2
     }
     var geometry = new ExtrudeGeometry(shape, extrudeSettings);
-    var material = new MeshPhongMaterial({ color: options.color, transparent: true });
+    var material = new MeshPhongMaterial({ color: options.color });
     var mesh = new Mesh(geometry, material);
     mesh.position.set(options.position.x, options.position.y, options.position.z);
     mesh.scale.set(options.scale.x, options.scale.y, options.scale.z);
@@ -107,6 +107,11 @@ class Shapes extends Group {
     for (var i = 0; i < length; i++) {
       var child = this.children[i];
       child.material.opacity = opacity;
+      var transparent = opacity < 1;
+      if (child.material.transparent !== transparent) {
+        child.material.transparent = transparent;
+        child.material.needsUpdate = true; // Opaque and transparent use different shader variants
+      }
     }
   }
 

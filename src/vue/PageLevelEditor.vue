@@ -395,16 +395,10 @@
     if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
     app.level.theme = name;
 
-    // Recreate current level with new theme data
-    const json = app.level.exportToJSON();
-
-    // Only recolor children still matching the old theme's default; manually-set colors are preserved
-    json.children.forEach(child => {
-      if (child.color && oldTheme && child.color === oldTheme.color) child.color = theme.color;
+    // Recolor in place, only children still matching the old theme's default (manually-set colors are preserved), rebuilding the level is very slow on big levels
+    if (oldTheme) app.level.children.forEach(child => {
+      if (child.color && child.color === oldTheme.color) child.setColors(theme.color);
     });
-
-    app.level.clearLevel();
-    app.level.importFromJSON(json);
     app.levelHistory.save('Updated level theme');
 
     // Dispatch event
@@ -420,6 +414,7 @@
   }
 
   let pausedCameraRoll = null; // Camera roll of a paused playtest run, null when the next play starts fresh
+  let pausedStaticVersion = null; // Level static version when the run was paused, to spot edits made meanwhile
 
   function rewind() {
     app.levelEditor.rewind();
@@ -429,7 +424,10 @@
 
   function pauseLevel() {
     // Remember the gravity camera roll so resuming the run restores it
-    if (app.play == true) pausedCameraRoll = app.camera.rotation.z;
+    if (app.play == true) {
+      pausedCameraRoll = app.camera.rotation.z;
+      pausedStaticVersion = app.level.staticVersion;
+    }
     objectTypeVisible.value = true;
     app.pauseLevel();
     app.level.deselectLevel();
@@ -456,6 +454,7 @@
     if (isResuming) {
       app.camera.rotation.z = pausedCameraRoll;
       pausedCameraRoll = null;
+      if (app.level.staticVersion !== pausedStaticVersion) app.physicsGrid.refresh(); // Blocks were edited while paused
     }
     else {
       // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)

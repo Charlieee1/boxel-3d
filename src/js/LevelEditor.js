@@ -1399,7 +1399,7 @@ class LevelEditor {
   }
 
   renderGrid() {
-    var settings = app.storage.getSettings();
+    var settings = app.storage.readSettings();
     var visible = settings.levelEditor.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
     var canvas = this.ensureGridCanvas();
     canvas.style.display = visible ? 'block' : 'none';
@@ -2182,7 +2182,7 @@ class LevelEditor {
 
   // Entering a level: camera looks straight at 0,0 at the level's zoom, saved as the orbit reset state
   resetCameraToOrigin() {
-    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.zDefault = app.level.zoom || app.storage.readSettings().invalidatingSettings.zoom;
     app.camera.position.set(0, 0, app.camera.position.zDefault);
     app.camera.rotation.set(0, 0, 0);
     this.controlsOrbit.target.set(0, 0, 0);
@@ -2535,7 +2535,7 @@ class LevelEditor {
       target.body.collisionFilter.mask = -1;
       if (!Composite.get(app.engine.world, target.body.id, 'body')) {
         World.add(app.engine.world, target.body);
-        app.scene.add(target.helper);
+        app.level.helpers.add(target.helper);
         target.helper.updateMatrixWorld();
       }
     }
@@ -2543,7 +2543,7 @@ class LevelEditor {
       target.body.collisionFilter.mask = 0; // Disable physics
       if (Composite.get(app.engine.world, target.body.id, 'body')) {
         World.remove(app.engine.world, target.body);
-        app.scene.remove(target.helper);
+        target.helper.removeFromParent();
       }
     }
   }

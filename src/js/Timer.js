@@ -42,7 +42,7 @@ class Timer {
   }
 
   getPlayTime() {
-    if (app.storage.getSettings().invalidatingSettings.deterministic === true) return this.ticks * this.tickDelay;
+    if (app.storage.readSettings().invalidatingSettings.deterministic === true) return this.ticks * this.tickDelay;
 
     var time = Date.now() - this.startTime - (this.playTime);
     if (time < this.lastTime) {
