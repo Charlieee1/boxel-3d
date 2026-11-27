@@ -2,6 +2,7 @@ import { Group } from 'three';
 import { Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
+import { convertLevel } from './LevelCompatibility.js';
 
 class Level extends Group {
   constructor() {
@@ -14,6 +15,7 @@ class Level extends Group {
     this.zoom = undefined;
     this.disableManualCheckpointRespawn = false;
     this.levelUIText = '';
+    this.author = ''; // Overrides the level pack's author when set
   }
 
   addObject(object) {
@@ -53,6 +55,7 @@ class Level extends Group {
     this.zoom = undefined;
     this.disableManualCheckpointRespawn = false;
     this.levelUIText = '';
+    this.author = '';
     if (app.levelUIText) app.levelUIText.innerHTML = '';
     app.player.removeRope();
     // Clear the session-only "Set as start position" playtest override - never persisted, cleared on exit/level-switch.
@@ -221,13 +224,16 @@ class Level extends Group {
   exportToJSON() {
     var levelJSON = {};
     levelJSON.name = this.name;
-    levelJSON.theme = this.theme;
-    levelJSON.defaultBlockColor = this.defaultBlockColor;
-    levelJSON.description = this.description;
-    levelJSON.zoom = this.zoom;
-    levelJSON.disableManualCheckpointRespawn = this.disableManualCheckpointRespawn;
-    levelJSON.levelUIText = this.levelUIText;
     levelJSON.version = app.version;
+    levelJSON.properties = {
+      theme: this.theme,
+      defaultBlockColor: this.defaultBlockColor,
+      description: this.description,
+      zoom: this.zoom,
+      disableManualCheckpointRespawn: this.disableManualCheckpointRespawn,
+      levelUIText: this.levelUIText,
+      author: this.author
+    };
     levelJSON.children = [];
 
     // Loop through group children
@@ -248,13 +254,15 @@ class Level extends Group {
   }
 
   importFromJSON(levelData) {
+    var properties = convertLevel(levelData).properties; // Old level formats can reach here from mods and history
     this.name = levelData.name;
-    this.theme = levelData.theme || this.defaultTheme;
-    this.defaultBlockColor = levelData.defaultBlockColor || null;
-    this.description = levelData.description;
-    this.zoom = levelData.zoom;
-    this.disableManualCheckpointRespawn = levelData.disableManualCheckpointRespawn || false;
-    this.levelUIText = levelData.levelUIText || '';
+    this.theme = properties.theme || this.defaultTheme;
+    this.defaultBlockColor = properties.defaultBlockColor || null;
+    this.description = properties.description;
+    this.zoom = properties.zoom;
+    this.disableManualCheckpointRespawn = properties.disableManualCheckpointRespawn || false;
+    this.levelUIText = properties.levelUIText || '';
+    this.author = properties.author || '';
     if (app.levelUIText) app.levelUIText.innerHTML = this.levelUIText; // Intentional: allows HTML tags
 
     // Loop through JSON level data

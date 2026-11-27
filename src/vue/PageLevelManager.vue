@@ -2,6 +2,7 @@
   import { ref, onMounted, onUnmounted } from 'vue';
   import ButtonSettings from './ButtonSettings.vue';
   import ThemedIcon from './ThemedIcon.vue';
+  import { convertLevel } from '../js/LevelCompatibility.js';
 
   var items = ref([]); // return format = [{ key: '', level: '' }, ...]
   var emit = defineEmits(['setPage']);
@@ -36,8 +37,8 @@
     if (file) {
       var reader = new FileReader();
       reader.onload = function() {
-        var level = JSON.parse(reader.result);
-        var theme = app.level.getTheme(level.theme) || {};
+        var level = convertLevel(JSON.parse(reader.result));
+        var theme = app.level.getTheme(level.properties.theme) || {};
         app.level.clearLevel();
         app.level.key = null; // Reset key to generate new save key
         app.background.visible = false;
@@ -59,7 +60,7 @@
 
   function editLevel(item) {
     var levelData = app.storage.getLevelData(item.key);
-    var theme = app.level.getTheme(levelData.theme) || {};
+    var theme = app.level.getTheme(levelData.properties.theme) || {};
     var settings = app.storage.getSettings();
     levelData.name = item.level.name;
     app.level.entityFactory.color = theme.color || '#620460';

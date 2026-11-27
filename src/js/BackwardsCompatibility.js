@@ -1,4 +1,5 @@
 // Upgrades data saved by older versions, runs before any other module reads storage
+import { convertStoredLevels } from './LevelCompatibility.js';
 
 // Old top-level settings key -> new nested path
 const legacySettingsPaths = {
@@ -76,6 +77,7 @@ function convertStoredSettings() {
 
 function runBackwardsCompatibility() {
   convertStoredSettings();
+  convertStoredLevels();
 }
 
 runBackwardsCompatibility();

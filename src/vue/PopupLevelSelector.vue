@@ -168,9 +168,9 @@
     return scores[key];
   }
 
-  // Old Backgrounds plays official packs with the classic theme, so show its thumbnail for them
+  // Old Backgrounds plays every pack with the classic theme, so show its thumbnail for them
   function getPackThumbnail(pack) {
-    var theme = (oldBackgrounds.value && app.level.isCommunityPack(pack) == false) ? 'classic' : pack.theme;
+    var theme = oldBackgrounds.value ? 'classic' : pack.theme;
     return themeData[theme].thumbnail;
   }
 

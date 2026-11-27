@@ -3,6 +3,7 @@ import { Utility } from './Utility.js';
 import { saveAs } from 'file-saver';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { runBackwardsCompatibility } from './BackwardsCompatibility.js';
+import { convertLevel } from './LevelCompatibility.js';
 import { getPresetTheme } from './ThemePresets.js';
 
 class StorageManager {
@@ -147,7 +148,7 @@ class StorageManager {
     for (var i = 0; i < length; i++) {
       var key = localStorage.key(i);
       if (key.indexOf(this.levelPrefix) >= 0) {
-        levels.push({ key: key, level: JSON.parse(localStorage.getItem(key)) });
+        levels.push({ key: key, level: convertLevel(JSON.parse(localStorage.getItem(key))) });
       }
     }
     levels.sort((a,b) => (a.level.name > b.level.name) ? 1 : ((b.level.name > a.level.name) ? -1 : 0));
@@ -155,7 +156,7 @@ class StorageManager {
   }
 
   getLevelData(key) {
-    return JSON.parse(localStorage.getItem(key));
+    return convertLevel(JSON.parse(localStorage.getItem(key)));
   }
 
   setLevelData(key, level) {

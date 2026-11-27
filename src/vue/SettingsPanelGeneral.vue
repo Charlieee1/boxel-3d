@@ -10,13 +10,7 @@
   const isDeterministicValid = ref(false);
   const isJumpIndicatorValid = ref(false);
 
-  // Editor snap of 0 isn't a valid increment, coerce it to 1 like old UI did
-  function onSnapChange(e) {
-    var snap = Number(e.target.value);
-    if (snap == 0) snap = 1;
-    e.target.value = snap;
-    emit('updateSettings', e);
-  }
+  const snapChoices = [0, 1, 2, 4, 8, 12, 16]; // Slider position -> editor snap, 0 is free placement
 
   function onChange(...args) {
     // Emit event to parent component
@@ -64,7 +58,7 @@
         <label for="snap">{{ i18n.t('settings.general.snap') }}</label>
       </div>
       <div class="option">
-        <input type="range" id="snap" data-setting="levelEditor.snap" min="0" max="16" step="4" :value="settings.levelEditor.snap" @input="onSnapChange($event)">
+        <input type="range" id="snap" data-setting="levelEditor.snap" min="0" :max="snapChoices.length - 1" step="1" :value="snapChoices.indexOf(settings.levelEditor.snap)" @input="$emit('updateSettings', $event, snapChoices)">
         <label for="snap">{{ settings.levelEditor.snap }}</label>
       </div>
       <div class="option">

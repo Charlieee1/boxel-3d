@@ -138,6 +138,7 @@ class Mouse {
   }
 
   snapToValue(value, step) {
+    if (!step) return value; // Snap 0 means free placement
     return Math.round(value / step) * step;
   }
   

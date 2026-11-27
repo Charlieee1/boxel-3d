@@ -47,7 +47,7 @@ class LevelEditor {
     this.controlsOrbit.touches = { ONE: 1, TWO: 3 }; // 0 = Rotate, 1 = Pan, 2 = Dolly pan, 3 = Dolly rotate
     this.controlsOrbit.zoomSpeed = 3;
     this.controlsOrbit.minDistance = 10;
-    this.controlsOrbit.maxDistance = 2000;
+    this.controlsOrbit.maxDistance = 5000;
     this.controlsOrbit.rotateSpeed = 0.5 // Default 1;
 		this.controlsOrbit.rotateSpeedDefault = 0.5 // Default 1;
     this.controlsOrbit.panSpeed = 1;
@@ -554,7 +554,7 @@ class LevelEditor {
     var length = Math.hypot(endX - origin.x, endY - origin.y);
     var angle = Math.atan2(endY - origin.y, endX - origin.x);
     // Never collapse to a zero-length block; under vertex snap, honor a short-but-real snapped length (grid-snap floor would override a valid nearby vertex match).
-    var minLength = this.snapMode !== 'normal' ? 0.001 : app.mouse.snap;
+    var minLength = this.snapMode !== 'normal' ? 0.001 : (app.mouse.snap || 0.001);
     length = Math.max(length, minLength);
     endX = origin.x + Math.cos(angle) * length;
     endY = origin.y + Math.sin(angle) * length;
@@ -1780,6 +1780,7 @@ class LevelEditor {
   showCutOutError() {
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'popup.text.invalid_cut_out',
         inputs: [
           { value: 'popup.button.close', type: 'button' }
@@ -2077,6 +2078,7 @@ class LevelEditor {
       // Dispatch new popup from event
       window.dispatchEvent(new CustomEvent('openPopup', {
         detail: {
+          class: 'editor',
           text: 'popup.text.save_level',
           inputs: [
             { value: 'popup.button.cancel', type: 'button', callback: () => { window.dispatchEvent(new CustomEvent('closePopup')); }},

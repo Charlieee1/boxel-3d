@@ -10,6 +10,7 @@ import { StorageManager } from './StorageManager.js';
 import { Collision } from './Collision.js';
 import { Background } from './Background.js';
 import { Level } from './Level.js';
+import { convertLevel } from './LevelCompatibility.js';
 import { LevelHistory } from './LevelHistory.js';
 import { Player } from './entities/Player.js';
 import { Mouse } from './Mouse.js';
@@ -57,7 +58,7 @@ class App {
     this.scene.add(this.level);
     
     // Initialize camera
-    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 5000);
+    this.camera = new PerspectiveCamera(this.fov, this.screenWidth / this.screenHeight, 1, 10000); // Far plane past the editor's 5000 max zoom so the level isn't clipped
     this.camera.tilt = 0;
     this.camera.position.x = 0;
     this.camera.position.y = 0;
@@ -645,17 +646,28 @@ class App {
       app.player.cancelRestart(); // clear stale kill()-timer/physics-bias carryover from a prior level, same as retryLevel() does
       if (app.storage.getSettings().invalidatingSettings.deterministic === true) app.player.resetDeterministicPhysics();
 
+      convertLevel(options.json);
       var storageSettings = this.storage.getSettings();
       var title = options.json.name;
       var source = options.source; // Exact level entry played from a menu, title lookups can't tell duplicates apart
       var description = this.level.getDescriptionByTitle(title, source)
-      var author = this.level.getAuthorByTitle(title, source);
-      var theme = this.level.getTheme(options.json.theme);
-      var zoom = options.json.zoom || storageSettings.invalidatingSettings.zoom;
+      var author = options.json.properties.author || this.level.getAuthorByTitle(title, source); // Level's own author overrides the pack's
+      var theme = this.level.getTheme(options.json.properties.theme);
+      var zoom = options.json.properties.zoom || storageSettings.invalidatingSettings.zoom;
       if (theme == null) theme = this.level.getPackTheme(title, source);
       if (theme == null) theme = app.level.getTheme('classic');
-      // Old Backgrounds: force classic theme for official levels only, community packs keep their authored theme
-      if (storageSettings.theme.oldBackgrounds == true && this.level.isFromCommunityPack(title, source) === false) theme = app.level.getTheme('classic');
+      // Old Backgrounds: force the classic background and default block colour on every level
+      var oldBackgrounds = storageSettings.theme.oldBackgrounds == true;
+      var levelJSON = options.json;
+      if (oldBackgrounds) {
+        var levelDefaults = [theme.color, options.json.properties.defaultBlockColor].filter(color => color).map(color => color.toLowerCase()); // The level's own default colours
+        theme = app.level.getTheme('classic');
+        // Blocks explicitly set to a level default colour get classic's too, on a copy so the source data stays untouched
+        levelJSON = Object.assign({}, options.json, { children: options.json.children.map(child => {
+          var isDefault = child.class != 'player' && typeof child.color == 'string' && levelDefaults.includes(child.color.toLowerCase());
+          return isDefault ? Object.assign({}, child, { color: theme.color }) : child;
+        })});
+      }
       app.level.entityFactory.color = theme.color;
       app.camera.position.z = zoom;
       app.camera.position.zDefault = zoom;
@@ -676,9 +688,9 @@ class App {
       app.play = true;
       app.timer.reset();
       app.level.clearLevel();
-      app.level.importFromJSON(options.json);
-      // Apply level's custom default color override, if set (loaded above by importFromJSON)
-      if (app.level.defaultBlockColor) app.level.entityFactory.color = app.level.defaultBlockColor;
+      app.level.importFromJSON(levelJSON);
+      // Apply level's custom default color override, if set (loaded above by importFromJSON), unless Old Backgrounds keeps classic's
+      if (app.level.defaultBlockColor && !oldBackgrounds) app.level.entityFactory.color = app.level.defaultBlockColor;
       app.level.publishedFileId = options.publishedFileId; // Steam level ID
       app.saveOrbitState();
       app.background.visible = true;

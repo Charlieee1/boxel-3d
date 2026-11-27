@@ -16,6 +16,9 @@ v2.9.4-m1.2.4
 - Fixed bug: Duplicate level names in the carousel caused problems with indexing
 - Fixed bug: Up arrow scrolled multiplayer chat
 - Fixed UI visuals
+- Organized level properties
+- Changed max zoom to 1000 in settings and level properties
+- Changed max zoom in level editor to 5000
 
 v2.9.4-m1.2.3
 - Fixed deterministic mode

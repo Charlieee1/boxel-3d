@@ -93,7 +93,7 @@
         </label>
       </div>
       <div class="option">
-        <input type="range" id="zoom" data-setting="invalidatingSettings.zoom" min="80" max="280" step="20" :value="settings.invalidatingSettings.zoom" :disabled="zoomDisabled" @input="onChange('updateSettings', $event)">
+        <input type="range" id="zoom" data-setting="invalidatingSettings.zoom" min="80" max="1000" step="20" :value="settings.invalidatingSettings.zoom" :disabled="zoomDisabled" @input="onChange('updateSettings', $event)">
         <label for="zoom">{{ (settings.invalidatingSettings.zoom) }}</label>
       </div>
     </div>

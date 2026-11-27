@@ -2340,7 +2340,7 @@
   .page .nav .button { background-color: var(--theme-button-color); }
 
   .page.campaign {
-    .nav .button, .nav .score .current, .nav .score .record, .footer .button, .controls .key:not(.active) {
+    .nav .button, .nav .score .current, .nav .score .record, .footer .button:not(.credit) {
       background-color: var(--theme-button-color);
       color: var(--theme-control-text-color);
     }
@@ -2359,6 +2359,9 @@
 
   // Footer button icon squares on every page
   .page .footer .button .material-symbols-rounded { background-color: var(--theme-control-color); }
+
+  // Pressed controller buttons (campaign and editor playtest) use the button colour, the classic accent is too dark
+  .controls .key.active { background-color: var(--theme-button-color); }
 
   // Level editor: highlighted buttons have no background, only the selected icon colour
   .level-editor .item.highlight, .level-editor .item.selected { background-color: transparent; }
@@ -2396,8 +2399,8 @@
   // Settings tabs: control colour, the selected tab keeps the panel colour so it joins the panel
   .popup.settings .container .tabs .tab:not(.selected) { background-color: var(--theme-control-color); }
 
-  // Settings, pause, changelog, textbox and finish popups: plain panel, solid controls, plain slider thumbs, control text colour everywhere
-  .popup.settings, .popup.pause, .popup.changelog, .popup.textbox, .popup.finish {
+  // Settings, pause, changelog, textbox, finish and level editor popups: plain panel, solid controls, plain slider thumbs, control text colour everywhere
+  .popup.settings, .popup.pause, .popup.changelog, .popup.textbox, .popup.finish, .popup.editor {
     .container .content {
       color: var(--theme-control-text-color);
 

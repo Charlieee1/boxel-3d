@@ -20,6 +20,7 @@
   const zoomValue = ref(app.level.zoom || 180);
   const disableManualCheckpointRespawnValue = ref(app.level.disableManualCheckpointRespawn || false);
   const levelUITextValue = ref(app.level.levelUIText || '');
+  const authorValue = ref(app.level.author || '');
   const resetPropertiesPopupVisible = ref(false);
   const isClosed = ref(true); // Popup animation state
   const isSettingsOpen = ref(false); // Editor/game keys are ignored while settings is open
@@ -617,6 +618,20 @@
     app.levelHistory.save('Cleared level UI text');
   }
 
+  // Level Properties popup: sets the level's author, which overrides the level pack's author
+  function updateAuthor(e) {
+    app.level.author = e.target.value;
+    authorValue.value = e.target.value;
+    app.levelHistory.save('Updated author');
+  }
+
+  // Level Properties popup: clears the author so the level pack's author is used again
+  function clearAuthor() {
+    app.level.author = '';
+    authorValue.value = '';
+    app.levelHistory.save('Cleared author');
+  }
+
   // Reset block properties popup: opens the checkbox list for the selected reset block
   function openResetPropertiesPopup() {
     resetPropertiesPopupVisible.value = true;
@@ -644,6 +659,7 @@
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'Edit',
         inputs: [
           { value: app.selectedObject.text, type: 'text', class: 'small-text', callback: updateText },
@@ -658,6 +674,7 @@
   function openSetCameraPositionPopup() {
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'Set Camera Position',
         inputs: [
           { label: 'X', type: 'text', class: 'half-width', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
@@ -1041,7 +1058,7 @@
       <div class="level-properties">
         <div class="property-row">
           <span class="label">Zoom</span>
-          <input type="range" min="80" max="280" step="20" :value="zoomValue" @input="updateZoom($event)">
+          <input type="range" min="80" max="1000" step="20" :value="zoomValue" @input="updateZoom($event)">
           <span class="value">{{ zoomValue }}</span>
           <a class="delete" @click="clearZoom" title="Reset to default"><ThemedIcon src="./svg/trash.svg" /></a>
         </div>
@@ -1066,6 +1083,11 @@
           <span class="label">Level UI Text</span>
           <textarea :value="levelUITextValue" @change="updateLevelUIText($event)"></textarea>
           <a class="delete" @click="clearLevelUIText" title="Clear"><ThemedIcon src="./svg/trash.svg" /></a>
+        </div>
+        <div class="property-row">
+          <span class="label">Author</span>
+          <input type="text" :value="authorValue" @change="updateAuthor($event)">
+          <a class="delete" @click="clearAuthor" title="Clear"><ThemedIcon src="./svg/trash.svg" /></a>
         </div>
       </div>
     </FancyPopup>
