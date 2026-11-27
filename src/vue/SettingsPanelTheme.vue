@@ -156,6 +156,21 @@
         <input type="color" id="themeMenuBgColor4" data-setting="theme.menuBgColor4" :value="settings.theme.menuBgColor4" @change="$emit('updateSettings', $event)">
       </div>
       <div class="option">
+        <input type="checkbox" id="themeMenuButtonArt" data-setting="theme.menuButtonArt" :checked="settings.theme.menuButtonArt == true" @change="$emit('updateSettings', $event)">
+        <label for="themeMenuButtonArt">{{ i18n.t('settings.theme.menu_button_art') }}</label>
+      </div>
+      <div class="option">
+        <label for="themeMenuButtonColor">{{ i18n.t('settings.theme.menu_button_color') }}</label>
+        <input type="color" id="themeMenuButtonColor" data-setting="theme.menuButtonColor" :value="settings.theme.menuButtonColor" @change="$emit('updateSettings', $event)">
+      </div>
+      <div class="option">
+        <label for="themeMenuButtonOpacity">{{ i18n.t('settings.theme.menu_button_opacity') }}</label>
+      </div>
+      <div class="option">
+        <input type="range" id="themeMenuButtonOpacity" data-setting="theme.menuButtonOpacity" :min="ranges.menuButtonOpacity.min" :max="ranges.menuButtonOpacity.max" :step="ranges.menuButtonOpacity.step" :value="settings.theme.menuButtonOpacity" @input="$emit('updateSettings', $event)">
+        <label for="themeMenuButtonOpacity">{{ settings.theme.menuButtonOpacity }}</label>
+      </div>
+      <div class="option">
         <label for="themeCornerRadius">{{ i18n.t('settings.theme.corner_radius') }}</label>
       </div>
       <div class="option">

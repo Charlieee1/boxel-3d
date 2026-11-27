@@ -2318,18 +2318,19 @@
   -webkit-font-smoothing: antialiased;
 }
 
+// Menu Button Art off: main menu buttons are plain colour blocks instead of the svg art
+:root[data-theme-menu-button-art="false"] .ui-bubble .page .content .carousel.menu .item .thumbnail {
+  img, .svg { background-color: var(--theme-menu-button-bg); }
+  img { object-position: -99em 0; } // Hides the art until the inline svg loads, keeps the block
+  .svg svg { display: none; }
+}
+
 // Flat Style theme switch: solid old UI blocks, every colour comes from a theme variable (set in App.applyThemeStyles)
 :root[data-theme-flat-style="true"] .ui-bubble {
-  // Main menu buttons and uncompleted level thumbnails become solid blocks instead of pictures
-  .page .content .carousel {
-    &.menu .item .thumbnail img, .item.uncompleted .thumbnail img { object-position: -99em 0; } // Hides the picture, keeps the block
-
-    &.menu .item .thumbnail {
-      img, .svg { background-color: var(--theme-button-color); }
-      .svg svg { display: none; }
-    }
-
-    .item.uncompleted .thumbnail img { background-color: var(--theme-uncompleted-level-color); }
+  // Uncompleted level thumbnails become solid blocks instead of pictures
+  .page .content .carousel .item.uncompleted .thumbnail img {
+    background-color: var(--theme-uncompleted-level-color);
+    object-position: -99em 0; // Hides the picture, keeps the block
   }
 
   // Page title accent word (the 3D in BOXEL3D)

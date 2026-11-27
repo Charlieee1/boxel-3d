@@ -26,6 +26,9 @@
       "menuBgColor2": "#9B08EB",
       "menuBgColor3": "#B122FF",
       "menuBgColor4": "#C04CFF",
+      "menuButtonArt": true,
+      "menuButtonColor": "#dc265a",
+      "menuButtonOpacity": 1,
       "flatStyle": false,
       "shadows": true,
       "buttonColor": "#dc265a",
@@ -58,6 +61,7 @@
       "menuBgColor2": "#31072b",
       "menuBgColor3": "#3e0937",
       "menuBgColor4": "#480940",
+      "menuButtonArt": false,
       "flatStyle": true,
       "shadows": false,
       "editorPreset": "classic"

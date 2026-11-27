@@ -6,5 +6,6 @@
   "editorIconHighlightOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.1 },
   "editorIconShadowOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.05 },
   "popupOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.05 },
-  "playButtonStripeOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.05 }
+  "playButtonStripeOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.05 },
+  "menuButtonOpacity": { "unit": "", "min": 0, "max": 1, "step": 0.05 }
 }

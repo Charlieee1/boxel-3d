@@ -438,6 +438,9 @@ class App {
     root.setProperty('--theme-uncompleted-level-color', settings.theme.uncompletedLevelColor);
 
     // Home-button svg recolouring: each shade is the art's exact HSL offset from its element's one base colour
+    // Menu buttons can drop the art for a plain colour block instead
+    document.documentElement.setAttribute('data-theme-menu-button-art', settings.theme.menuButtonArt != false);
+    root.setProperty('--theme-menu-button-bg', this.util.hexToRgba(settings.theme.menuButtonColor, settings.theme.menuButtonOpacity));
     root.setProperty('--theme-skins-bg-color', settings.theme.skinsBgColor);
     root.setProperty('--theme-skins-bg-color-dark', this.util.shadeHex(settings.theme.skinsBgColor, -11.73, 0, 0));
     root.setProperty('--theme-skins-bg-color-mid', this.util.shadeHex(settings.theme.skinsBgColor, -2.35, 0, 0));
