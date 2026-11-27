@@ -1,6 +1,6 @@
 import { Box3, Frustum, Matrix4, Vector3 } from 'three';
 
-// Game-level render cull: while playing, only statics in cells the camera sees (by world box, so scale and rotation count) and moving objects are drawn
+// Game-level render cull: only statics in cells the camera sees (by world box, so scale and rotation count) and moving or edited objects are drawn
 
 const CELL_SIZE = 256;
 const MAX_CELLS_PER_OBJECT = 64; // Bigger objects are tested on their own instead of filling many cells
@@ -24,46 +24,93 @@ function getLayerIndex(z) {
   return z < 0 ? -index : index;
 }
 
+function isSameMatrix(a, b) {
+  for (var i = 0; i < 16; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 class RenderGrid {
   constructor(level) {
     this.level = level;
     this.enabled = true;
     this.builtVersion = null;
     this.layers = new Map(); // layer index -> { cellSize, zMin, zMax, cells: key -> { box, objects } }
-    this.largeObjects = []; // { object, box }
-    this.unboxed = []; // Objects without geometry bounds, always drawn
+    this.largeObjects = new Set(); // Objects too big for cells, each tested by its own box
+    this.unboxed = new Set(); // Objects without geometry bounds, always drawn
+    this.registered = new Set();
     this.frame = 0;
     this.savedChildren = null;
     this.savedHelpers = null;
   }
 
   build() {
-    var level = this.level;
     this.layers = new Map();
-    this.largeObjects = [];
-    this.unboxed = [];
+    this.largeObjects = new Set();
+    this.unboxed = new Set();
+    this.registered.forEach(object => object._renderGrid = null);
+    this.registered = new Set();
+    this.refresh();
+  }
+
+  // Brings the cells up to date: only objects added, removed or moved since they were registered get (re)bucketed
+  refresh() {
+    var level = this.level;
+    var frame = ++this.frame;
     for (var i = 0; i < level.children.length; i++) {
       var object = level.children[i];
       if (!level.isStaticChild(object)) continue;
-      _box.setFromObject(object);
-      var isNeverCulled = object.getObjectByProperty('frustumCulled', false) != null; // Animated models move past their bounds
-      if (_box.isEmpty() || isNeverCulled) {
-        this.unboxed.push(object);
-        continue;
-      }
-      var layer0 = getLayerIndex(_box.min.z), layer1 = getLayerIndex(_box.max.z);
-      for (var l = layer0; l <= layer1; l++) {
-        if (this.addToLayer(l, object) == false) {
-          this.largeObjects.push({ object: object, box: _box.clone() });
-          break;
+      var entry = object._renderGrid;
+      if (entry != null && entry.grid === this) {
+        if (isSameMatrix(entry.matrix, object.matrixWorld.elements)) {
+          entry.frame = frame;
+          continue;
         }
+        this.unregister(object);
       }
+      this.register(object, frame);
     }
+    this.registered.forEach(object => {
+      if (object._renderGrid.frame !== frame) this.unregister(object); // Removed, or no longer static
+    });
     this.builtVersion = level.staticVersion;
   }
 
+  register(object, frame) {
+    _box.setFromObject(object);
+    var entry = { grid: this, frame: frame, matrix: object.matrixWorld.elements.slice(), cells: [], box: null };
+    object._renderGrid = entry;
+    this.registered.add(object);
+    var isNeverCulled = object.getObjectByProperty('frustumCulled', false) != null; // Animated models move past their bounds
+    if (_box.isEmpty() || isNeverCulled) {
+      this.unboxed.add(object);
+      return;
+    }
+    var layer0 = getLayerIndex(_box.min.z), layer1 = getLayerIndex(_box.max.z);
+    for (var l = layer0; l <= layer1; l++) {
+      if (this.addToLayer(l, object, entry) == false) {
+        entry.box = _box.clone();
+        this.largeObjects.add(object);
+        return;
+      }
+    }
+  }
+
+  unregister(object) {
+    var entry = object._renderGrid;
+    entry.cells.forEach(cell => {
+      var index = cell.objects.indexOf(object);
+      if (index >= 0) cell.objects.splice(index, 1); // The cell's box stays as big as it was, which is only conservative
+    });
+    this.largeObjects.delete(object);
+    this.unboxed.delete(object);
+    this.registered.delete(object);
+    object._renderGrid = null;
+  }
+
   // Puts the object (bounds in _box) in a layer's cells, false when it's too big for them
-  addToLayer(index, object) {
+  addToLayer(index, object, entry) {
     var layer = this.layers.get(index);
     if (layer == null) {
       var depth = LAYER_DEPTHS[Math.abs(index) - 1] || 0;
@@ -83,6 +130,7 @@ class RenderGrid {
         if (cell == null) layer.cells.set(key, cell = { box: new Box3(), objects: [] });
         cell.box.union(_box);
         cell.objects.push(object);
+        entry.cells.push(cell);
       }
     }
     return true;
@@ -118,17 +166,18 @@ class RenderGrid {
     return range;
   }
 
-  // Swaps the level's children for only what the camera can see, until end() restores them
-  begin(camera) {
-    this.end(); // A render that threw never restored the lists
+  // Level objects the camera may see: statics in visible cells, plus moving and actively edited ones
+  getVisibleObjects(camera, extraObjects = []) {
     var level = this.level;
-    if (this.enabled == false) return;
-    if (this.builtVersion !== level.staticVersion) this.build();
+    if (this.builtVersion !== level.staticVersion) {
+      if (this.builtVersion == null) this.build();
+      else this.refresh();
+    }
 
     var frame = ++this.frame;
     var visible = [];
     var add = function(object) {
-      if (object._renderFrame !== frame) {
+      if (object._renderFrame !== frame && object.parent === level) {
         object._renderFrame = frame;
         visible.push(object);
       }
@@ -152,12 +201,21 @@ class RenderGrid {
       }
       else layer.cells.forEach(visitCell); // Viewing the level edge-on, fewer cells exist than the range covers
     });
-    this.largeObjects.forEach(function(entry) {
-      if (_frustum.intersectsBox(entry.box)) add(entry.object);
+    this.largeObjects.forEach(function(object) {
+      if (_frustum.intersectsBox(object._renderGrid.box)) add(object);
     });
     this.unboxed.forEach(add);
     level.getDynamicObjects().forEach(add);
+    extraObjects.forEach(add);
+    return visible;
+  }
 
+  // Swaps the level's children for only what the camera can see, until end() restores them
+  begin(camera, extraObjects) {
+    this.end(); // A render that threw never restored the lists
+    if (this.enabled == false) return;
+    var level = this.level;
+    var visible = this.getVisibleObjects(camera, extraObjects);
     this.savedChildren = level.children;
     level.children = visible;
 

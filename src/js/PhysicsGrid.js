@@ -1,4 +1,4 @@
-import { Composite, Detector, Events } from 'matter-js';
+import { Bounds, Composite, Detector, Events } from 'matter-js';
 
 // Game-level cull: Matter only handles moving bodies and nearby statics, kept in the exact order a full list would have so collisions are identical
 
@@ -39,6 +39,25 @@ class PhysicsGrid {
         if (value != null) grid.beforeDetect();
       }
     });
+  }
+
+  // Bodies whose bounds contain the point, in world order (same answer Query.point gives from every body), or null when the cells may be out of date
+  getBodiesAt(point) {
+    var world = this.engine.world;
+    if (this.enabled == false || this.list == null || this.engine.detector.bodies !== this.list || world.isModified || world.composites.length > 0) return null;
+    var stamp = ++this.stamp;
+    var found = [];
+    var add = function(body) {
+      if (body._cullStamp !== stamp && Bounds.contains(body.bounds, point)) {
+        body._cullStamp = stamp;
+        found.push(body);
+      }
+    };
+    this.dynamics.forEach(add);
+    this.alwaysStatics.forEach(add);
+    var cell = this.cells.get(cellKey(Math.floor(point.x / CELL_SIZE), Math.floor(point.y / CELL_SIZE)));
+    if (cell != null) cell.forEach(add);
+    return found.sort((a, b) => a._cullIndex - b._cullIndex);
   }
 
   // Rebuilds from every body in the world, for when static bodies changed in the middle of a run (editor edits while paused)

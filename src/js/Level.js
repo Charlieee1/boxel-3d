@@ -1,20 +1,71 @@
-import { Group } from 'three';
-import { Composite, Constraint, World } from 'matter-js';
+import { Group, Matrix4 } from 'three';
+import { Common, Composite, Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
 import { convertLevel } from './LevelCompatibility.js';
 
-// Every number a reset can rewrite on a body and its parts, to tell whether a reset changed anything
-function getBodyState(body) {
-  var state = [body.positionPrev.x, body.positionPrev.y, body.anglePrev, body.velocity.x, body.velocity.y, body.speed, body.angularVelocity, body.angularSpeed, body.circleRadius];
+// Passes every number a reset can rewrite on a body and its parts to visit(), in a fixed order
+function visitBodyState(body, visit) {
+  visit(body.positionPrev.x); visit(body.positionPrev.y); visit(body.anglePrev);
+  visit(body.velocity.x); visit(body.velocity.y); visit(body.speed);
+  visit(body.angularVelocity); visit(body.angularSpeed); visit(body.circleRadius);
   for (var i = 0; i < body.parts.length; i++) {
     var part = body.parts[i];
-    state.push(part.position.x, part.position.y, part.angle, part.area, part.mass, part.inverseMass, part.density, part.inertia, part.inverseInertia);
-    state.push(part.bounds.min.x, part.bounds.min.y, part.bounds.max.x, part.bounds.max.y);
-    for (var j = 0; j < part.vertices.length; j++) state.push(part.vertices[j].x, part.vertices[j].y);
-    for (var k = 0; k < part.axes.length; k++) state.push(part.axes[k].x, part.axes[k].y);
+    visit(part.position.x); visit(part.position.y); visit(part.angle);
+    visit(part.area); visit(part.mass); visit(part.inverseMass); visit(part.density); visit(part.inertia); visit(part.inverseInertia);
+    visit(part.bounds.min.x); visit(part.bounds.min.y); visit(part.bounds.max.x); visit(part.bounds.max.y);
+    for (var j = 0; j < part.vertices.length; j++) { visit(part.vertices[j].x); visit(part.vertices[j].y); }
+    for (var k = 0; k < part.axes.length; k++) { visit(part.axes[k].x); visit(part.axes[k].y); }
   }
+}
+
+// Every number a reset can rewrite on a body and its parts, to tell whether a reset changed anything
+function getBodyState(body) {
+  var state = [];
+  visitBodyState(body, value => state.push(value));
   return state;
+}
+
+const _matrix = new Matrix4();
+const hashFloat = new Float64Array(1);
+const hashWords = new Uint32Array(hashFloat.buffer);
+var hashA = 0, hashB = 0;
+
+function hashValue(value) {
+  hashFloat[0] = +value;
+  hashA = Math.imul(Math.imul(hashA ^ hashWords[0], 16777619) ^ hashWords[1], 16777619);
+  hashB = Math.imul(Math.imul(hashB ^ hashWords[1], 2246822519) ^ hashWords[0], 3266489917);
+}
+
+// Hash of everything physics reads from a body (its reset state can be passed in), signed zeros included, to tell whether it's still exactly as built
+function getBodyHash(body, state = null) {
+  hashA = 0x811c9dc5;
+  hashB = 0x9e3779b9;
+  if (state != null) state.forEach(hashValue);
+  else visitBodyState(body, hashValue);
+  var filter = body.collisionFilter;
+  [body.isStatic, body.isSleeping, body.sleepCounter, body.motion, body.friction, body.frictionStatic, body.frictionAir, body.restitution, body.slop, body.timeScale, body.deltaTime, filter.category, filter.mask, filter.group].forEach(hashValue);
+  for (var i = 0; i < body.parts.length; i++) {
+    var part = body.parts[i];
+    hashValue(part.isSensor); hashValue(part.isStatic); hashValue(part.friction); hashValue(part.restitution);
+  }
+  return (hashA >>> 0) * 4294967296 + (hashB >>> 0);
+}
+
+// Writes a getBodyState() array back into the body
+function setBodyState(body, state) {
+  var k = 0;
+  body.positionPrev.x = state[k++]; body.positionPrev.y = state[k++]; body.anglePrev = state[k++];
+  body.velocity.x = state[k++]; body.velocity.y = state[k++]; body.speed = state[k++];
+  body.angularVelocity = state[k++]; body.angularSpeed = state[k++]; body.circleRadius = state[k++];
+  for (var i = 0; i < body.parts.length; i++) {
+    var part = body.parts[i];
+    part.position.x = state[k++]; part.position.y = state[k++]; part.angle = state[k++];
+    part.area = state[k++]; part.mass = state[k++]; part.inverseMass = state[k++]; part.density = state[k++]; part.inertia = state[k++]; part.inverseInertia = state[k++];
+    part.bounds.min.x = state[k++]; part.bounds.min.y = state[k++]; part.bounds.max.x = state[k++]; part.bounds.max.y = state[k++];
+    for (var j = 0; j < part.vertices.length; j++) { part.vertices[j].x = state[k++]; part.vertices[j].y = state[k++]; }
+    for (var m = 0; m < part.axes.length; m++) { part.axes[m].x = state[k++]; part.axes[m].y = state[k++]; }
+  }
 }
 
 function isSameBodyState(a, b) {
@@ -139,6 +190,13 @@ class Level extends Group {
   }
 
   clearLevel() {
+    this.resetProperties();
+    this.removeAllObjects();
+    this.deselectLevel();
+  }
+
+  // Level properties and session state back to defaults, the part of clearLevel() that isn't objects
+  resetProperties() {
     this.name = this.defaultName;
     this.theme = this.defaultTheme;
     this.defaultBlockColor = null;
@@ -153,8 +211,6 @@ class Level extends Group {
       app.levelEditor.tempSpawnPosition = null;
       app.levelEditor.tempSpawnRotation = null;
     }
-    this.removeAllObjects();
-    this.deselectLevel();
   }
 
   // Same as removeObject() on every child, in one pass (removing one at a time shifts whole arrays each time, quadratic on big levels)
@@ -332,7 +388,7 @@ class Level extends Group {
     }
   }
 
-  exportToJSON() {
+  exportToJSON(includeObjects = true) {
     var levelJSON = {};
     levelJSON.name = this.name;
     levelJSON.version = app.version;
@@ -346,6 +402,7 @@ class Level extends Group {
       author: this.author
     };
     levelJSON.children = [];
+    if (includeObjects == false) return levelJSON; // Level history stores objects on its own
 
     // Loop through group children
     for (var i = 0; i < this.children.length; i++) {
@@ -365,6 +422,13 @@ class Level extends Group {
   }
 
   importFromJSON(levelData) {
+    this.importProperties(levelData);
+    for (var i = 0; i < levelData.children.length; i++) {
+      this.addObject(this.createObjectFromJSON(levelData.children[i]));
+    }
+  }
+
+  importProperties(levelData) {
     var properties = convertLevel(levelData).properties; // Old level formats can reach here from mods and history
     this.name = levelData.name;
     this.theme = properties.theme || this.defaultTheme;
@@ -375,20 +439,99 @@ class Level extends Group {
     this.levelUIText = properties.levelUIText || '';
     this.author = properties.author || '';
     if (app.levelUIText) app.levelUIText.innerHTML = this.levelUIText; // Intentional: allows HTML tags
+  }
 
-    // Loop through JSON level data
-    for (var i = 0; i < levelData.children.length; i++) {
-      var settings = app.storage.readSettings();
-      var objectData = levelData.children[i];
-      var object = this.entityFactory.createObject(objectData.class);
-      if (objectData.class == 'player') {
-        object = app.player;
-        if (settings.invalidatingSettings.deterministic === true) object.restoreConstructedBody();
-      }
-      object.helper.visible = settings.invalidatingSettings.hitboxes;
-      this.setObjectProperties(object, objectData);
-      this.addObject(object);
+  // A level object built from its exported data, not yet added (the player is reused)
+  createObjectFromJSON(objectData) {
+    var settings = app.storage.readSettings();
+    var object = this.entityFactory.createObject(objectData.class);
+    if (objectData.class == 'player') {
+      object = app.player;
+      if (settings.invalidatingSettings.deterministic === true) object.restoreConstructedBody();
     }
+    object.helper.visible = settings.invalidatingSettings.hitboxes;
+    this.setObjectProperties(object, objectData);
+    object.sourceData = objectData; // What it was built from and how, so undo can tell whether a rebuild would give the same object
+    object.sourceHash = getBodyHash(object.body);
+    object.sourceDeterministic = settings.invalidatingSettings.deterministic === true;
+    return object;
+  }
+
+  // Whether a static block is still exactly as createObjectFromJSON() built it, so a rebuild from the same data can keep it
+  isAsBuilt(object) {
+    if (object.sourceData == null || object === app.player || !this.isStaticChild(object)) return false;
+    if (object.visible !== true || object.hasTemporaryLook === true || object.geometryTemplate != null || this.modifiedObjects.has(object)) return false;
+    if (object.sourceDeterministic !== (app.storage.readSettings().invalidatingSettings.deterministic === true)) return false;
+    if (getBodyHash(object.body) === object.sourceHash) return true;
+    if (object.sourceState == null) return false;
+    setBodyState(object.body, object.sourceState); // Only reset drift differs, which a rebuild would undo too
+    return getBodyHash(object.body) === object.sourceHash;
+  }
+
+  // New ids in the order a rebuilt body's parts would get them, since Matter picks a collision's first body by lowest id
+  renewBodyIds(object) {
+    object.body.parts.slice().sort((a, b) => a.id - b.id).forEach(part => part.id = Common.nextId());
+  }
+
+  // Same result as removeAllObjects() then addObject() on each object in order, but objects already in the level stay instead of being rebuilt
+  setObjects(objects) {
+    this.invalidateStatics(); // Before the events below, so they don't patch the moving list out of order
+    this.modifiedObjects.clear(); // Every object counts as freshly added
+    this.driftingObjects.clear();
+    var oldChildren = this.children;
+    var levelBodies = new Set();
+    oldChildren.concat(objects).forEach(child => { if (child.body) levelBodies.add(child.body); });
+    var world = app.engine.world;
+    var bodies = world.bodies.filter(body => !levelBodies.has(body)); // Bodies added by anything else (mods) stay first
+    var helpers = [];
+    objects.forEach(object => {
+      if (object.position.z == 0) {
+        bodies.push(object.body);
+        helpers.push(object.helper);
+      }
+    });
+    world.bodies = bodies;
+    Composite.setModified(world, true, true, false);
+
+    var detach = function(parent, child) {
+      child.parent = null;
+      child.dispatchEvent({ type: 'removed' });
+      parent.dispatchEvent({ type: 'childremoved', child: child });
+    };
+    var attach = function(parent, child) {
+      if (child.parent != null) child.removeFromParent();
+      child.parent = parent;
+      child.dispatchEvent({ type: 'added' });
+      parent.dispatchEvent({ type: 'childadded', child: child });
+    };
+    var helperSet = new Set(helpers);
+    var oldHelpers = this.helpers.children;
+    this.helpers.children = helpers;
+    oldHelpers.forEach(helper => { if (!helperSet.has(helper)) detach(this.helpers, helper); });
+    helpers.forEach(helper => { if (helper.parent !== this.helpers) attach(this.helpers, helper); });
+
+    var objectSet = new Set(objects);
+    var kept = oldChildren.filter(child => child !== app.player && objectSet.has(child));
+    if (kept.length > 0) app.collision.forgetObjects(kept); // Their old contacts belong to the objects they stand in for
+    this.children = objects;
+    oldChildren.forEach(child => {
+      if (objectSet.has(child)) return;
+      detach(this, child);
+      if (child !== app.player) this.disposeObject(child);
+    });
+    var hitboxes = app.storage.readSettings().invalidatingSettings.hitboxes === true;
+    objects.forEach(object => {
+      var isKept = object.parent === this;
+      if (!isKept) attach(this, object);
+      object.updateMatrix();
+      _matrix.multiplyMatrices(this.matrixWorld, object.matrix);
+      var isInPlace = isKept && object !== app.player && _matrix.elements.every((value, i) => Object.is(value, object.matrixWorld.elements[i]));
+      if (!isInPlace) object.updateMatrixWorld(); // A kept block already in place has up-to-date children too
+      object.helper.visible = hitboxes;
+      object.updateHelper();
+    });
+    if (objects.length > 0) this.helpers.visible = hitboxes;
+    this.deselectLevel();
   }
 
   // Static objects changed since the last reset, then everything that moves (the player last, so its mode event wins)
@@ -431,7 +574,10 @@ class Level extends Group {
         // Non-deterministic resets re-scale static bodies, which nudges some for a while: keep resetting those until a reset changes nothing
         if (before != null) {
           if (isSameBodyState(before, getBodyState(child.body))) this.driftingObjects.delete(child);
-          else this.driftingObjects.add(child);
+          else {
+            this.driftingObjects.add(child);
+            if (child.sourceState == null && child.sourceHash === getBodyHash(child.body, before)) child.sourceState = before; // The as-built body, for undo to restore
+          }
         }
       } catch (e) {
         console.error('resetLevel(): failed to reset child', child.getClass ? child.getClass() : child, e);
@@ -511,6 +657,7 @@ class Level extends Group {
       app.levelEditor.controlsOrbit.enabled = true;
       app.levelEditor.controlsOrbit.reset();
       app.background.visible = false;
+      app.levelEditor.setPlaytesting(false); // Finish screen's continue goes back to editing
     }
 
     // Dispatch event after exiting level

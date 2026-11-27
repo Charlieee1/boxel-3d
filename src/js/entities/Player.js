@@ -238,12 +238,14 @@ class Player extends Cube {
           x: p1.x + ((p2.x - p1.x) * percent),
           y: p1.y + ((p2.y - p1.y) * percent)
         };
-        var collision = Query.point(app.engine.world.bodies, point);
-        
+        var candidates = app.physicsGrid.getBodiesAt(point) || app.engine.world.bodies; // Only bodies around the point, same result as checking all of them
+        var collision = Query.point(candidates, point);
+
         // Add rope if collision detected
         if (collision.length > 0 && collision[0].class != "player") {
           // Check if object is visible or on zero z-plane
-          var obj = app.level.getObjectByName(collision[0].name);
+          var hit = collision[0].object3D;
+          var obj = (hit != null && hit.parent === app.level) ? hit : app.level.getObjectByName(collision[0].name);
           if (obj.visible == true) {
             if (obj.position.z == 0) {
               app.level.add(this.rope);

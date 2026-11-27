@@ -67,7 +67,7 @@ class App {
     this.scene.onBeforeRender = (renderer, scene, camera) => {
       this.updateCameraFar(camera);
       this.player.syncLight();
-      if (this.play == true) this.renderGrid.begin(camera);
+      if (this.isRenderGridActive()) this.renderGrid.begin(camera, this.getActiveEditorObjects());
     };
     this.scene.onAfterRender = () => this.renderGrid.end();
 
@@ -570,6 +570,27 @@ class App {
       this.levelEditor.controlsOrbit.target.copy(this.player.position);
       this.levelEditor.controlsOrbit.saveState();
     }
+  }
+
+  // Culling applies while playing and while editing (edits made since the last save stay drawn through the editor's active objects)
+  isRenderGridActive() {
+    return this.play == true || (this.levelEditor != null && this.levelEditor.isEditorPaused());
+  }
+
+  getActiveEditorObjects() {
+    return (this.state == 'level-editor' && this.levelEditor != null) ? this.levelEditor.getActiveObjects() : [];
+  }
+
+  // Level objects the camera may see, in level order (so picking ties resolve as before), or null when culling isn't active
+  getVisibleLevelObjects() {
+    if (!this.isRenderGridActive() || this.renderGrid.enabled == false) return null;
+    if (this.levelOrderVersion !== this.level.staticVersion) {
+      this.levelOrder = new Map(this.level.children.map((child, index) => [child, index]));
+      this.levelOrderVersion = this.level.staticVersion;
+    }
+    var order = this.levelOrder;
+    var objects = this.renderGrid.getVisibleObjects(this.camera, this.getActiveEditorObjects());
+    return objects.sort((a, b) => (order.has(a) ? order.get(a) : Infinity) - (order.has(b) ? order.get(b) : Infinity));
   }
 
   // Vanilla's 5000 draw distance (so far background blocks stay hidden), pushed out only when the editor camera is zoomed out past it

@@ -198,6 +198,24 @@ class Collision {
     }
   }
 
+  // Objects a level reload kept start over without contacts, as the new objects a rebuild makes would
+  forgetObjects(objects) {
+    var forgotten = new Set(objects);
+    this.activeSensorObjects.forEach((pair, key) => {
+      if (forgotten.has(pair[0]) || forgotten.has(pair[1])) {
+        this.activeSensorPairs.delete(key);
+        this.activeSensorObjects.delete(key);
+      }
+    });
+    var pairs = app.engine.pairs, count = 0;
+    for (var i = 0; i < pairs.list.length; i++) {
+      var pair = pairs.list[i];
+      if (forgotten.has(pair.bodyA.parent.object3D) || forgotten.has(pair.bodyB.parent.object3D)) delete pairs.table[pair.id];
+      else pairs.list[count++] = pair;
+    }
+    pairs.list.length = count;
+  }
+
   // Bug: a deterministic-mode reset (Engine.clear(), see Player.resetDeterministicPhysics) wipes
   // Matter's own pair cache, but doesn't touch this Set - and resetToOrigin() then teleports bodies to
   // new positions. If a body was touching a sensor at the moment of reset and ends up NOT touching it

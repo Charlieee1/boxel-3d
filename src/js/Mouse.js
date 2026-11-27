@@ -75,7 +75,10 @@ class Mouse {
     var y = -(e.clientY / app.window.innerHeight) * 2 + 1;
     vec.set(x, y, 0);
     raycaster.setFromCamera(vec, app.camera);
-    var intersects = raycaster.intersectObjects(app.scene.children, true);
+    var targets = app.scene.children.filter(child => child !== app.level.helpers); // Hitbox lines are never picked, and testing every one is slow on big levels
+    var visibleLevelObjects = app.getVisibleLevelObjects(); // Only what's on screen can be under the cursor, in level order so ties pick the same block
+    if (visibleLevelObjects != null && targets[0] === app.level) targets = visibleLevelObjects.concat(targets.slice(1));
+    var intersects = raycaster.intersectObjects(targets, true);
 
     // Loop through objects selected
     for (var i = 0; i < intersects.length; i++) {

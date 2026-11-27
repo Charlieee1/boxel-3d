@@ -430,6 +430,7 @@
     }
     objectTypeVisible.value = true;
     app.pauseLevel();
+    app.levelEditor.setPlaytesting(false);
     app.level.deselectLevel();
     app.levelEditor.controlsOrbit.enabled = true;
     app.levelEditor.controlsOrbit.reset();
@@ -441,6 +442,7 @@
   
   function playCurrentLevel() {
     var isResuming = pausedCameraRoll != null;
+    app.levelEditor.setPlaytesting(true);
     objectTypeVisible.value = false;
     app.background.visible = true;
     app.level.deselectLevel();

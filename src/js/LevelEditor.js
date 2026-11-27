@@ -1358,8 +1358,8 @@ class LevelEditor {
   }
 
   updateRender() {
-    // Only force render level editor if app is paused
-    if (app.state == 'level-editor' && app.play == false) {
+    // Only force render level editor while editing (a popup holding a playtest needs no renders)
+    if (this.isEditorPaused()) {
       // Manually update matrices for edited objects (scene.matrixWorldAutoUpdate is off)
       if (app.selectedObject) app.selectedObject.updateMatrixWorld();
       this.controlsTransform.getHelper().updateMatrixWorld();
@@ -2100,6 +2100,7 @@ class LevelEditor {
     this.detachControls();
     this.clearCustomPivot(); // don't carry a stale pivot/proxy into the next editor session
     app.play = false;
+    this.setPlaytesting(false);
     if (saveLevel == true) this.saveLevel();
     app.level.clearLevel();
     app.levelHistory.clear();
@@ -2436,8 +2437,24 @@ class LevelEditor {
     return false;
   }
 
+  // Objects an edit in progress may be moving before it's saved, always drawn and picked even if the culling grid is stale
+  getActiveObjects() {
+    var action = this.exclusiveAction;
+    var objects = [app.selectedObject, this.hoverPreviewObject, this.pivotProxyTarget, this.controlsTransform.object, this.controlsPutty.object];
+    if (action != null) {
+      if (Array.isArray(action.selected)) objects.push(...action.selected);
+      objects.push(action.controlBlock, action.block);
+    }
+    return objects.filter(object => object != null);
+  }
+
+  // Editing, not a playtest held by a popup (a textbox or the finish screen also stop play)
   isEditorPaused() {
-    return app.state == 'level-editor' && app.play == false;
+    return app.state == 'level-editor' && app.play == false && this.isPlaytesting !== true;
+  }
+
+  setPlaytesting(state) {
+    this.isPlaytesting = state;
   }
 
   // Gates starting a new exclusive editor action: paused, no popup, and nothing else holding exclusiveAction.
