@@ -20,4 +20,7 @@
     box-shadow: 0em 0.25em 0em rgba(#000000, 0.25);
     height: 2em !important;
   }
+
+  // Flat Style: same colour as the other in-game buttons
+  :root[data-theme-flat-style="true"] .button { background-color: var(--theme-button-color) !important; }
 </style>

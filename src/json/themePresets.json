@@ -1,0 +1,137 @@
+{
+  "main": {
+    "bubble": {
+      "bgColor1": "#1e1e1e",
+      "bgColor2": "#FF8A4C",
+      "bgColor3": "#FF674C",
+      "cornerRadius": 1,
+      "iconSize": 1,
+      "accentColor": "#eb2b6d",
+      "optionAccentColor": "#4ca9ff",
+      "optionAccentColor2": "#FFC24C",
+      "statsIconColor": "#4CA9FF",
+      "skinsBgColor": "#FF8A4C",
+      "editorButtonBgColor": "#4CA9FF",
+      "editorButtonCraneColor": "#FFC24C",
+      "editorButtonBlocksColor": "#4C7DFF",
+      "multiplayerBgColor": "#A8E148",
+      "reverseMultiplayerShades": false,
+      "playButtonBgColor": "#FF4C8A",
+      "playButtonPlatformColor": "#FFD687",
+      "playButtonStripeColor": "#FF7DAA",
+      "playButtonStripeOpacity": 1,
+      "playButtonIconColor": "#FFFFFF",
+      "playButtonIconShadeColor": "#D7D7D7",
+      "menuBgColor1": "#7908EB",
+      "menuBgColor2": "#9B08EB",
+      "menuBgColor3": "#B122FF",
+      "menuBgColor4": "#C04CFF",
+      "menuButtonArt": true,
+      "menuButtonColor": "#dc265a",
+      "menuButtonOpacity": 1,
+      "flatStyle": false,
+      "shadows": true,
+      "buttonColor": "#dc265a",
+      "controlColor": "#27a0ff",
+      "controlTextColor": "#ffffff",
+      "uncompletedLevelColor": "#620460",
+      "editorPreset": "dark"
+    },
+    "classic": {
+      "extends": "bubble",
+      "bgColor1": "#1e1e1e",
+      "bgColor2": "#0287ef",
+      "bgColor3": "#0287ef",
+      "cornerRadius": 0.2,
+      "accentColor": "#8f193a",
+      "optionAccentColor": "#316ea6",
+      "optionAccentColor2": "#ffffff",
+      "skinsBgColor": "#FF80C0",
+      "editorButtonBgColor": "#004A8F",
+      "editorButtonCraneColor": "#C25CFF",
+      "multiplayerBgColor": "#990799",
+      "reverseMultiplayerShades": true,
+      "playButtonBgColor": "#1B0017",
+      "playButtonPlatformColor": "#C408C0",
+      "playButtonStripeColor": "#ffffff",
+      "playButtonStripeOpacity": 0.4,
+      "playButtonIconColor": "#EB2B6D",
+      "playButtonIconShadeColor": "#C8255D",
+      "menuBgColor1": "#290825",
+      "menuBgColor2": "#31072b",
+      "menuBgColor3": "#3e0937",
+      "menuBgColor4": "#480940",
+      "menuButtonArt": false,
+      "flatStyle": true,
+      "shadows": false,
+      "editorPreset": "classic"
+    },
+    "legacy": {
+      "extends": "classic",
+      "cornerRadius": 0
+    },
+    "funk": {
+      "extends": "bubble",
+      "reverseMultiplayerShades": true,
+      "playButtonStripeColor": "#ffffff",
+      "playButtonStripeOpacity": 0.4,
+      "playButtonIconColor": "#EB2B6D",
+      "playButtonIconShadeColor": "#C8255D"
+    }
+  },
+  "editor": {
+    "dark": {
+      "editorToolbarColor1": "#1a1a1a",
+      "editorToolbarColor2": "#0e0e0e",
+      "editorToolbarOpacity": 0.5,
+      "editorIconSize": 1.5,
+      "editorIconDeselectedColor": "#999999",
+      "editorIconSelectedColor": "#ffffff",
+      "editorIconHighlightColor": null,
+      "editorIconHighlightColorIsExplicit": false,
+      "editorIconHighlightOpacity": 1,
+      "editorIconShadowColor": "#000000",
+      "editorIconShadowOpacity": 0.15,
+      "editorTextboxBgColor": "#262626",
+      "editorTextboxFontColor": "#ffffff"
+    },
+    "light": {
+      "extends": "dark",
+      "editorToolbarColor1": "#e5e5e5",
+      "editorToolbarColor2": "#ffffff",
+      "editorIconDeselectedColor": "#666666",
+      "editorIconSelectedColor": "#000000",
+      "editorTextboxBgColor": "#ffffff",
+      "editorTextboxFontColor": "#000000"
+    },
+    "classic": {
+      "extends": "dark",
+      "editorToolbarColor1": "#333333",
+      "editorToolbarOpacity": 1,
+      "editorIconDeselectedColor": "#7f7f7f"
+    },
+    "funk": {
+      "extends": "dark",
+      "editorToolbarOpacity": 1,
+      "editorIconHighlightColorIsExplicit": true,
+      "editorIconHighlightOpacity": 1,
+      "editorIconShadowOpacity": 1
+    }
+  },
+  "popup": {
+    "dark": {
+      "popupOpacity": 0.5,
+      "popupBgColor": "#000000",
+      "popupTextColor": "#ffffff"
+    },
+    "light": {
+      "extends": "dark",
+      "popupBgColor": "#ffffff",
+      "popupTextColor": "#000000"
+    },
+    "funk": {
+      "extends": "dark",
+      "popupOpacity": 1
+    }
+  }
+}

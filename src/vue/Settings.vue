@@ -16,7 +16,7 @@
   var tab = ref('general');
   var inputs = ref([]);
   var isOpen = ref(false);
-  var settings = ref({});
+  var settings = ref(app.storage.getSettings()); // Panels render before opening, so nested keys must exist
   var pendingScrollTarget = null;
 
   function parseOpenSettingsDetail(detail) {
@@ -39,14 +39,21 @@
   function addEventListeners() {
     window.addEventListener('openSettings', openSettings);
 	  window.addEventListener('closeSettings', closeSettings);
-    window.addEventListener('keydown', keydown);
+    window.addEventListener('keydown', keydown, true); // Capture phase runs before every other key handler
+    window.addEventListener('settingsImported', reloadSettings);
   }
   
   // Remove event listeners
   function removeEventListeners() {
     window.removeEventListener('openSettings', openSettings);
 	  window.removeEventListener('closeSettings', closeSettings);
-    window.removeEventListener('keydown', keydown);
+    window.removeEventListener('keydown', keydown, true);
+    window.removeEventListener('settingsImported', reloadSettings);
+  }
+
+  function reloadSettings() {
+    settings.value = app.storage.getSettings();
+    i18n.locale.value = settings.value.language; // Switch UI language to the imported one
   }
 
   function openSettings(e) {
@@ -93,8 +100,9 @@
       if (e.target.tagName != 'INPUT' && e.target.tagName != 'TEXTAREA') {
         var exitKeys = ['Escape', 'KeyE'];
         if (exitKeys.indexOf(e.code) > -1) {
-          // Close popup
+          // Close popup, and stop the key reaching pages/popups underneath (ex: Escape pausing or exiting them)
           e.preventDefault();
+          e.stopImmediatePropagation();
           runLastInputCallback(e);
         }
       }
@@ -103,7 +111,8 @@
 
   function updateSettings(e, choices, callback = function(){}) {
     var el = e.target;
-    var key = el.id;
+    var path = (el.dataset?.setting || el.id).split('.'); // data-setting holds the nested path, ex: graphics.quality
+    var key = path.pop();
     var value = el.value;
     var type = e.target.type;
 
@@ -114,8 +123,13 @@
     if (type == 'checkbox') value = el.checked;
     if (choices) value = choices[value];
 
+    // Reload if settings were saved elsewhere since opening, so only this change is applied
+    var storageSettings = app.storage.getSettings();
+    if (storageSettings.lastSaved != settings.value.lastSaved) settings.value = storageSettings;
+
     // Store settings
-    settings.value[key] = value;
+    var group = path.reduce(function(object, name) { return object[name]; }, settings.value);
+    group[key] = value;
     app.updateSettings(settings.value);
     callback();
   }

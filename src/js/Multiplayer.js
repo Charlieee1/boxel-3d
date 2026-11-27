@@ -43,7 +43,7 @@ class Multiplayer {
     if (this.isHost()) {
       // Set host player name from settings
       var settings = app.storage.getSettings();
-      app.player.setText(settings.name);
+      app.player.setText(settings.multiplayer.name);
     }
   }
 

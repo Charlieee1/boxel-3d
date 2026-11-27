@@ -11,6 +11,7 @@
   var title = ref('');
   var text = ref('');
   var description = ref('');
+  var popupClass = ref(''); // Optional class from the event detail, for per-popup styling (ex: pause)
   var inputs = ref([]);
   var isOpen = ref(false);
 
@@ -31,21 +32,21 @@
   function openPopup(e) {
     isOpen.value = true;
 
-    // Assign values from custom event detail
+    // Assign values from custom event detail (always reassigned so a previous popup's text never lingers)
     if (e.detail) {
-      if (e.detail.text) {
-        // Check title i18n
-        if (i18n.te(e.detail.title, i18n.fallbackLocale.value)) title.value = i18n.t(e.detail.title);
-        else title.value = e.detail.title;
+      popupClass.value = e.detail.class || '';
 
-        // Check text i18n
-        if (i18n.te(e.detail.text, i18n.fallbackLocale.value)) text.value = i18n.t(e.detail.text);
-        else text.value = e.detail.text;
+      // Check title i18n
+      if (i18n.te(e.detail.title, i18n.fallbackLocale.value)) title.value = i18n.t(e.detail.title);
+      else title.value = e.detail.title;
 
-        // Check description i18n
-        if (i18n.te(e.detail.description, i18n.fallbackLocale.value)) description.value = i18n.t(e.detail.description);
-        else description.value = e.detail.description;
-      }
+      // Check text i18n
+      if (i18n.te(e.detail.text, i18n.fallbackLocale.value)) text.value = i18n.t(e.detail.text);
+      else text.value = e.detail.text;
+
+      // Check description i18n
+      if (i18n.te(e.detail.description, i18n.fallbackLocale.value)) description.value = i18n.t(e.detail.description);
+      else description.value = e.detail.description;
       if (e.detail.inputs) {
         inputs.value = e.detail.inputs;
         inputs.value.forEach(function(input) {
@@ -81,6 +82,11 @@
   }
 
   function runCallback(callback, e) {
+    // A mouse-clicked button/input keeps DOM focus after this popup closes, which can make the very
+    // next keyboard action look like it's still typing into that element (ex: page-level keydown
+    // handlers that gate on the focused element) - blur so keyboard input is immediately usable again
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+
     if (callback == null) callback = closePopup;
     callback(e);
   }
@@ -135,7 +141,7 @@
 
 <template>
   <Transition name="fade-bubble-popup">
-    <div class="popup" v-if="isOpen == true">
+    <div class="popup" :class="popupClass" v-if="isOpen == true">
       <div class="background" @click="runLastInputCallback"></div>
       <div class="container">
         <div class="content">
@@ -143,14 +149,25 @@
           <h1 class="title" v-html="title" v-if="title"></h1>
           <p class="text" v-html="text" v-if="text"></p>
           <p class="description" v-html="description" v-if="description"></p>
+          <!-- Text fields are the popup's main content so the text being typed is visible -->
+          <div class="fields" v-if="inputs.some(input => input.type == 'text')">
+            <template v-for="(input, index) of inputs">
+              <div class="field" v-if="input.type == 'text'">
+                <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
+                <input :class="input.class" :id="'popup-' + input.type + '-' + index" type="text" :value="input.value" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+              </div>
+            </template>
+          </div>
           <div class="inputs">
             <template v-for="(input, index) of inputs">
-              <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
-              <template v-if="input.type == 'button'">
-                <button :class="{ [input.class]: input.class, 'selected': index == inputs.length - 1 }" :id="'popup-' + input.type + '-' + index" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">{{ input.value }}</button>
-              </template>
-              <template v-else>
-                <input :class="input.class" :id="'popup-' + input.type + '-' + index" :type="input.type" :value="input.value" :min="input.min" :max="input.max" :step="input.step" :accept="input.accept" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+              <template v-if="input.type != 'text'">
+                <label v-if="input.label" :for="'popup-' + input.type + '-' + index">{{ input.label }}</label>
+                <template v-if="input.type == 'button'">
+                  <button :class="{ [input.class]: input.class, 'selected': index == inputs.length - 1 }" :id="'popup-' + input.type + '-' + index" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">{{ input.value }}</button>
+                </template>
+                <template v-else>
+                  <input :class="input.class" :id="'popup-' + input.type + '-' + index" :type="input.type" :value="input.value" :min="input.min" :max="input.max" :step="input.step" :accept="input.accept" :style="input.style" v-on:[input.event]="runCallback(input.callback, $event)">
+                </template>
               </template>
             </template>
           </div>
@@ -165,4 +182,7 @@
 <style>
   .fade-bubble-popup-enter-active, .fade-bubble-popup-leave-active { transition: opacity 0.1s ease; }
   .fade-bubble-popup-enter-from, .fade-bubble-popup-leave-to { opacity: 0; }
+  /* Still in the DOM during its 0.1s fade-out - without this it keeps swallowing clicks meant for
+     whatever's underneath (ex: canvas) until the transition finishes */
+  .fade-bubble-popup-leave-active { pointer-events: none; }
 </style>

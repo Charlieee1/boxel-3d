@@ -20,8 +20,11 @@
   const zoomValue = ref(app.level.zoom || 180);
   const disableManualCheckpointRespawnValue = ref(app.level.disableManualCheckpointRespawn || false);
   const levelUITextValue = ref(app.level.levelUIText || '');
+  const authorValue = ref(app.level.author || '');
   const resetPropertiesPopupVisible = ref(false);
   const isClosed = ref(true); // Popup animation state
+  const isSettingsOpen = ref(false); // Editor/game keys are ignored while settings is open
+  let isPausedBySettings = false; // Settings paused a running playtest, so closing it resumes
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
   const textOverlay = ref();
@@ -284,6 +287,9 @@
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
+    window.addEventListener('beforeSettingsOpened', settingsOpened);
+    window.addEventListener('beforeSettingsClosed', settingsClosing);
+    window.addEventListener('settingsClosed', settingsClosed);
     window.addEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.addEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.addEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
@@ -293,6 +299,7 @@
     window.addEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.addEventListener('forceBuildDisabled', onForceBuildDisabled);
     window.addEventListener('snapModeChanged', onSnapModeChanged);
+    window.addEventListener('hardExitLevelEditor', hardExit);
   }
 
   function removeEventListeners() {
@@ -306,6 +313,9 @@
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
+    window.removeEventListener('beforeSettingsOpened', settingsOpened);
+    window.removeEventListener('beforeSettingsClosed', settingsClosing);
+    window.removeEventListener('settingsClosed', settingsClosed);
     window.removeEventListener('levelEditorActionStarted', onLevelEditorActionStarted);
     window.removeEventListener('levelEditorActionEnded', onLevelEditorActionEnded);
     window.removeEventListener('levelEditorActionStageChanged', onLevelEditorActionStageChanged);
@@ -315,6 +325,7 @@
     window.removeEventListener('forceBuildEnabled', onForceBuildEnabled);
     window.removeEventListener('forceBuildDisabled', onForceBuildDisabled);
     window.removeEventListener('snapModeChanged', onSnapModeChanged);
+    window.removeEventListener('hardExitLevelEditor', hardExit);
   }
 
   function popupOpened() {
@@ -353,7 +364,7 @@
 
   function checkAutosave() {
     if (app.play == true) return; // Matches Ctrl+S, which is paused-only.
-    var minutes = app.storage.getSettings().autosave;
+    var minutes = app.storage.getSettings().levelEditor.autosave;
     if (!minutes || minutes <= 0) return;
     if (Date.now() - lastAutosaveTime >= minutes * 60000) {
       lastAutosaveTime = Date.now();
@@ -408,18 +419,19 @@
     app.levelEditor.redo();
   }
 
+  let pausedCameraRoll = null; // Camera roll of a paused playtest run, null when the next play starts fresh
+
   function rewind() {
-    pauseLevel();
     app.levelEditor.rewind();
-    app.levelEditor.controlsOrbit.target.copy(app.player.position);
+    pausedCameraRoll = null; // Next play starts a fresh run
+    pauseLevel(); // Recover editor controls with the camera on the reset player
   }
 
   function pauseLevel() {
+    // Remember the gravity camera roll so resuming the run restores it
+    if (app.play == true) pausedCameraRoll = app.camera.rotation.z;
     objectTypeVisible.value = true;
     app.pauseLevel();
-    // Restore every object (including the player) to its real saved state - undoes playtest physics drift
-    // and any "Set as start position" temp spawn override, same reset retryLevel() uses to start a fresh run.
-    app.resetScene();
     app.level.deselectLevel();
     app.levelEditor.controlsOrbit.enabled = true;
     app.levelEditor.controlsOrbit.reset();
@@ -430,6 +442,7 @@
   }
   
   function playCurrentLevel() {
+    var isResuming = pausedCameraRoll != null;
     objectTypeVisible.value = false;
     app.background.visible = true;
     app.level.deselectLevel();
@@ -438,8 +451,24 @@
     app.levelEditor.controlsTransform.detach();
     app.levelEditor.controlsPutty.detach();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
-    // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
-    app.levelEditor.applyTempSpawn();
+
+    // Resuming a paused run continues where it left off, so skip the fresh-start setup
+    if (isResuming) {
+      app.camera.rotation.z = pausedCameraRoll;
+      pausedCameraRoll = null;
+    }
+    else {
+      // Playtest at the temporary "Set as start position" override if one is set (session-only, never saved - see the checkpoint panel button below)
+      app.levelEditor.applyTempSpawn();
+      app.player.cancelRestart(); // same cleanup App.playLevel()/Level.retryLevel() do - this is a 3rd "start playing" entry point they don't cover
+      // Deterministic mode only: App.playLevel()/Level.retryLevel() reset gravity to default too - a gravity
+      // block's trigger otherwise carries over across pause/play. Non-deterministic mode never reset gravity
+      // here before, so this stays opt-in to avoid changing existing (non-deterministic) editor behavior.
+      if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
+        app.player.resetDeterministicPhysics();
+        app.updateGravity();
+      }
+    }
     app.startLevel();
   }
 
@@ -589,6 +618,20 @@
     app.levelHistory.save('Cleared level UI text');
   }
 
+  // Level Properties popup: sets the level's author, which overrides the level pack's author
+  function updateAuthor(e) {
+    app.level.author = e.target.value;
+    authorValue.value = e.target.value;
+    app.levelHistory.save('Updated author');
+  }
+
+  // Level Properties popup: clears the author so the level pack's author is used again
+  function clearAuthor() {
+    app.level.author = '';
+    authorValue.value = '';
+    app.levelHistory.save('Cleared author');
+  }
+
   // Reset block properties popup: opens the checkbox list for the selected reset block
   function openResetPropertiesPopup() {
     resetPropertiesPopupVisible.value = true;
@@ -616,9 +659,10 @@
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'Edit',
         inputs: [
-          { value: app.selectedObject.text, type: 'text', callback: updateText },
+          { value: app.selectedObject.text, type: 'text', class: 'small-text', callback: updateText },
           { value: 'Cancel', type: 'button' },
           { value: 'Close', type: 'button' }
         ]
@@ -630,10 +674,11 @@
   function openSetCameraPositionPopup() {
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'Set Camera Position',
         inputs: [
-          { label: 'X', type: 'text', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
-          { label: 'Y', type: 'text', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
+          { label: 'X', type: 'text', class: 'half-width', value: Math.round(app.camera.position.x), callback: (e) => app.levelEditor.setCameraX(e.target.value) },
+          { label: 'Y', type: 'text', class: 'half-width', value: Math.round(app.camera.position.y), callback: (e) => app.levelEditor.setCameraY(e.target.value) },
           { value: 'Close', type: 'button' }
         ]
       }
@@ -663,10 +708,36 @@
     }
   }
 
+  function settingsOpened() {
+    isSettingsOpen.value = true;
+
+    // Freeze a running playtest while settings is open, same as campaign
+    isPausedBySettings = app.play == true;
+    if (isPausedBySettings) app.pauseLevel();
+  }
+
+  // Theme preset change: leave a playtest for edit mode (closing settings must not resume it), then exit to the main menu keeping the checkpoint
+  function hardExit() {
+    if (isPausedBySettings || app.play == true) pauseLevel();
+    isPausedBySettings = false;
+    app.levelEditor.exitLevel('home', true);
+  }
+
+  function settingsClosing() {
+    if (isPausedBySettings) app.resumeLevel();
+    isPausedBySettings = false;
+  }
+
+  // Cleared after the close finishes so the key that closed settings (Escape/E) isn't also handled here
+  function settingsClosed() {
+    isSettingsOpen.value = false;
+  }
+
   function keydown(e) {
     // Track key state for editor transforms (Shift-duplicate) and putty lock.
     app.levelEditor.keys[e.code] = true;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') app.levelEditor.controlsPutty.lockRotation = true;
+    if (isSettingsOpen.value == true) return;
 
     // Ignore keyboard shortcuts when typing in an input field
     const targetTagName = e?.target?.tagName;
@@ -698,6 +769,7 @@
           app.player.restart();
         }
         else {
+          if (e.code == 'ArrowUp') e.preventDefault(); // Don't also scroll the multiplayer chat
           if (isInputEnabled.value === true && jumpKeys.includes(e.code)) {
             // Jump if one of the keys is pressed
             app.player.jump();
@@ -986,7 +1058,7 @@
       <div class="level-properties">
         <div class="property-row">
           <span class="label">Zoom</span>
-          <input type="range" min="80" max="280" step="20" :value="zoomValue" @input="updateZoom($event)">
+          <input type="range" min="80" max="1000" step="20" :value="zoomValue" @input="updateZoom($event)">
           <span class="value">{{ zoomValue }}</span>
           <a class="delete" @click="clearZoom" title="Reset to default"><ThemedIcon src="./svg/trash.svg" /></a>
         </div>
@@ -1011,6 +1083,11 @@
           <span class="label">Level UI Text</span>
           <textarea :value="levelUITextValue" @change="updateLevelUIText($event)"></textarea>
           <a class="delete" @click="clearLevelUIText" title="Clear"><ThemedIcon src="./svg/trash.svg" /></a>
+        </div>
+        <div class="property-row">
+          <span class="label">Author</span>
+          <input type="text" :value="authorValue" @change="updateAuthor($event)">
+          <a class="delete" @click="clearAuthor" title="Clear"><ThemedIcon src="./svg/trash.svg" /></a>
         </div>
       </div>
     </FancyPopup>
@@ -1051,6 +1128,10 @@
         <div class="property-row">
           <span class="label">Gravity</span>
           <input type="checkbox" :checked="selectedObject.getResetConfig().resetGravity" @change="updateResetConfig('resetGravity', $event)">
+        </div>
+        <div class="property-row">
+          <span class="label">Camera Rotation Animation</span>
+          <input type="checkbox" :checked="selectedObject.getResetConfig().resetCameraRotationAnimation" @change="updateResetConfig('resetCameraRotationAnimation', $event)">
         </div>
       </div>
     </FancyPopup>

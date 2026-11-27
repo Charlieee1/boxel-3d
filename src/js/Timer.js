@@ -22,6 +22,14 @@ class Timer {
     this.playTime = 0;
     this.lastTime = 0;
     this.isPaused = true;
+    this.ticks = 0;
+    this.tickDelay = 0;
+  }
+
+  // Deterministic mode: counted once per physics tick (only while playing), so the time is exact and lag-independent
+  tick(delay) {
+    this.ticks++;
+    this.tickDelay = delay;
   }
 
   resume() { 
@@ -34,6 +42,8 @@ class Timer {
   }
 
   getPlayTime() {
+    if (app.storage.getSettings().invalidatingSettings.deterministic === true) return this.ticks * this.tickDelay;
+
     var time = Date.now() - this.startTime - (this.playTime);
     if (time < this.lastTime) {
       time = this.lastTime;

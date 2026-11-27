@@ -1,5 +1,5 @@
 <script setup>
-  import { onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { onBeforeMount, onMounted, onUnmounted, ref, toRaw, watch } from 'vue';
   import { Utility } from '../js/Utility.js';
 
   // Define items for carousel
@@ -100,7 +100,7 @@
 
   function isSelected(item) {
     if (item.title == null || selectedItem.value == null) return false;
-    return selectedItem.value.title == item.title;
+    return toRaw(selectedItem.value) === toRaw(item); // Match the item itself, titles can be duplicated
   }
   
   function setDefaultItem() {

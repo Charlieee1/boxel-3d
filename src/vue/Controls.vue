@@ -3,7 +3,7 @@
 
   var settings = ref(app.storage.getSettings());
   var isVisible = ref(false);
-  var isReversed = ref(settings.value.controls.reverse);
+  var isReversed = ref(settings.value.general.reverseControls === false);
   var isDesktop = ref(true);
   var keys = ref({});
 
@@ -58,7 +58,7 @@
 
   function updateControls() {
     updateSettings();
-    isReversed.value = settings.value.controls.reverse;
+    isReversed.value = settings.value.general.reverseControls === false;
   }
 
   onMounted(function() {

@@ -2,6 +2,7 @@ import { Group } from 'three';
 import { Constraint, World } from 'matter-js';
 import { EntityFactory } from './entities/EntityFactory.js';
 import { levels, themes } from '../js/Data.js';
+import { convertLevel } from './LevelCompatibility.js';
 
 class Level extends Group {
   constructor() {
@@ -14,6 +15,7 @@ class Level extends Group {
     this.zoom = undefined;
     this.disableManualCheckpointRespawn = false;
     this.levelUIText = '';
+    this.author = ''; // Overrides the level pack's author when set
   }
 
   addObject(object) {
@@ -29,6 +31,7 @@ class Level extends Group {
     // Add to group and compute world matrix once (scene.matrixWorldAutoUpdate is off)
     this.add(object);
     object.updateMatrixWorld();
+    object.helper.visible = app.storage.getSettings().invalidatingSettings.hitboxes === true; // New blocks follow debug mode
     object.updateHelper();
   }
 
@@ -52,6 +55,7 @@ class Level extends Group {
     this.zoom = undefined;
     this.disableManualCheckpointRespawn = false;
     this.levelUIText = '';
+    this.author = '';
     if (app.levelUIText) app.levelUIText.innerHTML = '';
     app.player.removeRope();
     // Clear the session-only "Set as start position" playtest override - never persisted, cleared on exit/level-switch.
@@ -220,13 +224,16 @@ class Level extends Group {
   exportToJSON() {
     var levelJSON = {};
     levelJSON.name = this.name;
-    levelJSON.theme = this.theme;
-    levelJSON.defaultBlockColor = this.defaultBlockColor;
-    levelJSON.description = this.description;
-    levelJSON.zoom = this.zoom;
-    levelJSON.disableManualCheckpointRespawn = this.disableManualCheckpointRespawn;
-    levelJSON.levelUIText = this.levelUIText;
     levelJSON.version = app.version;
+    levelJSON.properties = {
+      theme: this.theme,
+      defaultBlockColor: this.defaultBlockColor,
+      description: this.description,
+      zoom: this.zoom,
+      disableManualCheckpointRespawn: this.disableManualCheckpointRespawn,
+      levelUIText: this.levelUIText,
+      author: this.author
+    };
     levelJSON.children = [];
 
     // Loop through group children
@@ -247,13 +254,15 @@ class Level extends Group {
   }
 
   importFromJSON(levelData) {
+    var properties = convertLevel(levelData).properties; // Old level formats can reach here from mods and history
     this.name = levelData.name;
-    this.theme = levelData.theme;
-    this.defaultBlockColor = levelData.defaultBlockColor || null;
-    this.description = levelData.description;
-    this.zoom = levelData.zoom;
-    this.disableManualCheckpointRespawn = levelData.disableManualCheckpointRespawn || false;
-    this.levelUIText = levelData.levelUIText || '';
+    this.theme = properties.theme || this.defaultTheme;
+    this.defaultBlockColor = properties.defaultBlockColor || null;
+    this.description = properties.description;
+    this.zoom = properties.zoom;
+    this.disableManualCheckpointRespawn = properties.disableManualCheckpointRespawn || false;
+    this.levelUIText = properties.levelUIText || '';
+    this.author = properties.author || '';
     if (app.levelUIText) app.levelUIText.innerHTML = this.levelUIText; // Intentional: allows HTML tags
 
     // Loop through JSON level data
@@ -261,23 +270,45 @@ class Level extends Group {
       var settings = app.storage.getSettings();
       var objectData = levelData.children[i];
       var object = this.entityFactory.createObject(objectData.class);
-      if (objectData.class == 'player') object = app.player;
-      object.helper.visible = settings.debug;
+      if (objectData.class == 'player') {
+        object = app.player;
+        if (settings.invalidatingSettings.deterministic === true) object.restoreConstructedBody();
+      }
+      object.helper.visible = settings.invalidatingSettings.hitboxes;
       this.setObjectProperties(object, objectData);
       this.addObject(object);
     }
   }
 
   resetLevel() {
+    // Reset counter read by tools/determinism-test to split recordings into attempts
+    window.__detAttempt = (window.__detAttempt == null) ? 0 : window.__detAttempt + 1;
+
     // Gets called every time the level starts (including checkpoints)
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
-      child.resetToOrigin();
-      child.updateMatrixWorld();
-      // Not every child has a helper (ex: Rope) - a missing method here would throw and abort the loop, leaving later children un-reset
-      if (child.updateHelper) child.updateHelper();
+      // A throw from any one child (ex: a bad resyncBodyGeometry() case) must not abort the loop -
+      // every later child would silently stay un-reset (wrong position, stale velocity, etc), which is
+      // far worse and harder to diagnose than one object being skipped. Log which one failed so it's
+      // traceable from a single report instead of needing a repro round-trip.
+      try {
+        child.resetToOrigin();
+        child.updateMatrixWorld();
+        // Not every child has a helper (ex: Rope)
+        if (child.updateHelper) child.updateHelper();
+      } catch (e) {
+        console.error('resetLevel(): failed to reset child', child.getClass ? child.getClass() : child, e);
+      }
     }
-    app.player.jumpReady = true;
+
+    // Every body is now at its final post-reset position - prune any activeSensorPairs entries that
+    // no longer correspond to genuine contact (see Collision.reconcileAfterReset for why this is
+    // needed: a deterministic-mode reset can teleport a body away from a sensor it was touching,
+    // without Matter ever getting the chance to fire a real collisionEnd for that pair).
+    app.collision.reconcileAfterReset();
+
+    // A jump made just before this reset still launches the player, so don't also hand out a fresh one
+    if (app.player.jumpPending !== true) app.player.jumpReady = true;
   }
 
   retryLevel(keepCheckpoint = false, respawnToTemp = true) {
@@ -285,6 +316,18 @@ class Level extends Group {
     app.play = true;
     app.level.removeParticles();
     app.player.cancelRestart();
+
+    // Reset impulses and collision-pair cache if deterministic mode enabled - retryLevel() is the
+    // path the "R" key uses directly (PageCampaign.vue), bypassing Player.restart()/respawn() and
+    // their existing resetDeterministicPhysics() call entirely. resetScene() below zeroes each body's
+    // position/velocity via resetToOrigin(), but never touches positionImpulse/constraintImpulse or
+    // Matter's pair cache (warm-started contact impulses), so without this, an "R" restart carries
+    // that residual solver bias straight over from whatever happened before the restart.
+    if (app.storage.getSettings().invalidatingSettings.deterministic === true) {
+      app.player.resetDeterministicPhysics();
+    }
+
+    var jumpReady = app.player.jumpReady; // resetScene() refreshes the jump, which checkpoint respawns don't get
     app.resetScene();
     window.dispatchEvent(new CustomEvent('closePopup'));
 
@@ -297,19 +340,27 @@ class Level extends Group {
       // temp spawn override (if any) so "R" mid-playtest respects it too (see LevelEditor.applyTempSpawn).
       if (respawnToTemp && app.levelEditor) app.levelEditor.applyTempSpawn();
     }
-    else app.player.respawn(true);
+    else {
+      app.player.jumpReady = jumpReady;
+      app.player.respawn(true);
+    }
+
+    // resetScene() drew a frame at the level start - redraw at the real respawn point so it's never shown
+    app.updateRender({ delta: 0, alpha: 0 });
   }
 
   exitLevel() {
     app.timer.reset();
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
     app.player.removeCheckpoint();
 
     // Check current state
     if (app.state == 'campaign') {
       var settings = app.storage.getSettings();
-      var progress = parseInt(settings.progress)
+      var progress = parseInt(settings.selectedLevel)
       progress++; // Increase level progress
-      settings.progress = progress;
+      settings.selectedLevel = progress;
+      app.level.clearLevel(); // Clear the level's zoom (and lock) before settings re-apply the camera zoom
       app.updateSettings(settings);
       window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-picker' }));
     }
@@ -346,6 +397,7 @@ class Level extends Group {
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'textbox',
         text: text,
         inputs: [{ type: 'button', value: 'popup.button.continue', callback: function() {
           app.resumeLevel();
@@ -361,6 +413,10 @@ class Level extends Group {
     this.traverse(function(obj) {
       if (obj.helper) obj.helper.visible = visible;
     });
+
+    // Hidden helpers aren't kept in place, so reposition them and redraw now (the loop doesn't render while paused)
+    this.updateHelpers();
+    app.graphics.render();
   }
 
   updateHelpers() {
@@ -374,63 +430,73 @@ class Level extends Group {
     return themes[name];
   }
 
-  getPackTheme(title) {
+  getPackTheme(title, target = null) {
     // Loop through levels json
     var theme;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) theme = themes[pack.theme];
+        if (target != null ? level === target : title == level.title) theme = themes[pack.theme];
       })
     });
     return theme;
   }
 
-  getDescriptionByTitle(title) {
+  getDescriptionByTitle(title, target = null) {
     var description;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) description = level.description;
+        if (target != null ? level === target : title == level.title) description = level.description;
       })
     });
     return description;
   }
 
-  getAuthorByTitle(title) {
+  getAuthorByTitle(title, target = null) {
     var author;
     levels.packs.forEach(function(pack) {
       pack.levels.forEach(function(level) {
         // Assign theme using theme pack key
-        if (title == level.title) author = level.author;
+        if (target != null ? level === target : title == level.title) author = level.author;
       })
     });
     return author;
   }
 
-  isFromCommunityPack(title) {
-    // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
-    var communityPack = levels.packs.find(pack => pack.title === 'Level Packs');
+  // Community levels live in the pack titled 'Level Packs' (see Data.js fetchLevelPacks)
+  isCommunityPack(pack) {
+    return pack.title === 'Level Packs';
+  }
+
+  isFromCommunityPack(title, target = null) {
+    var communityPack = levels.packs.find(pack => this.isCommunityPack(pack));
     if (communityPack == null) return false;
+    if (target != null) return communityPack.levels.includes(target); // Exact level, titles can be duplicated
     return communityPack.levels.some(level => level.title === title);
   }
 
-  getLevelIndex(title) {
+  getLevelIndex(title, target = null) {
     var count = 0;
     var index = -1;
-    
+
     // Loop through packs array
     levels.packs.forEach(function(pack) {
       // Loop through each levels array
       pack.levels.forEach(function(level) {
-        // Set level index and increment count
-        if (title == level.title) {
+        // Set level index and increment count, a target level object is matched exactly (titles can be duplicated)
+        if (target != null ? level === target : title == level.title) {
           index = count;
         }
         count++;
       });
     });
     return index;
+  }
+
+  // Inverse of getLevelIndex(), returns the level entry at a flattened index across all packs
+  getLevelByIndex(index) {
+    return levels.packs.flatMap(pack => pack.levels)[index];
   }
 }
 

@@ -24,13 +24,7 @@
   }
 
   function setLayout(e) {
-    const el = e.target;
-    const controls = props.settings.controls;
-    controls.reverse = el.checked;
-    onChange('updateSettings', e, {
-      true: { ...controls, reverse: true },
-      false: { ...controls, reverse: false }
-    });
+    onChange('updateSettings', e, { true: false, false: true }); // Checked means reversed, stored inverted as reverseControls
 
     // Dispatch control event
     window.dispatchEvent(new CustomEvent('updateControls'));
@@ -39,11 +33,13 @@
   // Run function after being mounted (visible)
   onMounted(function() {
     window.addEventListener('settingsOpened', onSettingsOpened);
+    window.addEventListener('settingsImported', onSettingsOpened);
     window.addEventListener('settingsClosed', onSettingsClosed);
   });
 
   onUnmounted(function() {
     window.removeEventListener('settingsOpened', onSettingsOpened);
+    window.removeEventListener('settingsImported', onSettingsOpened);
     window.removeEventListener('settingsClosed', onSettingsClosed);
   });
 </script>
@@ -57,7 +53,7 @@
         <label>{{ i18n.t('settings.controls.controller') }}</label>
       </div>
       <div class="option">
-        <input type="checkbox" id="controls" :checked="settings.controls?.reverse == true" @change="setLayout">
+        <input type="checkbox" id="controls" data-setting="general.reverseControls" :checked="settings.general.reverseControls === false" @change="setLayout">
         <label for="controls">{{ i18n.t('settings.controls.reverse') }}</label>
       </div>
     </div>
@@ -69,8 +65,8 @@
         </label>
       </div>
       <div class="option">
-        <input type="range" id="buffer" min="0" max="100" step="10" :value="settings.buffer" @input="onChange('updateSettings', $event)">
-        <label for="buffer">{{ settings.buffer }}ms</label>
+        <input type="range" id="buffer" data-setting="invalidatingSettings.inputBuffer" min="0" max="100" step="10" :value="settings.invalidatingSettings.inputBuffer" @input="onChange('updateSettings', $event)">
+        <label for="buffer">{{ settings.invalidatingSettings.inputBuffer }}ms</label>
       </div>
     </div>
   </div>

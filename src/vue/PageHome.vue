@@ -124,6 +124,7 @@
     // Dispatch new popup from event
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'changelog',
         text: '<div style="font-size: 0.75em; padding-right: 1em; text-align: left;">' + text + '</div>',
         inputs: [{ type: 'button', value: 'popup.button.close' }]
       }
@@ -176,9 +177,9 @@
       <ButtonSettings class="button fade-in" :class="{ right: util.isNativeApp() }" />
     </div>
     <div class="content fade-in">
-      <h1>BOXEL3D</h1>
+      <h1>BOXEL<span class="title-accent">3D</span></h1>
       <p v-html="message" @click="clickLink($event)"></p>
-      <Carousel :items="menu" scrolling="no" />
+      <Carousel class="menu" :items="menu" scrolling="no" />
     </div>
     <div class="footer">
       <a class="button fade-in" v-if="versionButtonVisible" :class="{ hidden: version == '' }" @click="openChangelog" :title="i18n.t('home.button.changelog')">

@@ -5,7 +5,7 @@
   var prevTime = Date.now();
   var running = false;
   var frames = 0;
-  var mode = ref(app?.stats?.mode || 'fps');
+  var mode = ref(app.storage.getSettings().graphics.statsMode || 'fps');
   var fps = ref(0);
   var position = ref('');
   var coordinates = computed(() => {
@@ -52,15 +52,17 @@
 
   function updateStatsVisibility() {
     var settings = app.storage.getSettings();
-    isVisible.value = settings.stats;
+    isVisible.value = settings.graphics.stats;
   }
 
   function changeStats() {
     if (mode.value == 'fps') mode.value = 'position'; 
     else mode.value = 'fps';
     
-    // Store stats mode in global memory
-    app.stats = Object.assign(app.stats || {}, { mode: mode.value });
+    // Store stats mode in settings so it persists across sessions
+    var settings = app.storage.getSettings();
+    settings.graphics.statsMode = mode.value;
+    app.updateSettings(settings);
   }
 
   onMounted(function() {
@@ -94,7 +96,7 @@
     .material-symbols-rounded {
       background-color: var(--theme-stats-icon-color, #4CA9FF);
       box-shadow: 0em 0.125em 0em rgba(0, 0, 0, 0.25);
-      border-radius: var(--theme-corner-radius, 0.5em);
+      border-radius: calc(var(--theme-corner-scale, 1) * 0.5em);
       width: 1.5em;
       height: 1.5em;
       display: flex;
@@ -104,12 +106,6 @@
     }
 
     > * { pointer-events: none; }
-
-    // Matches the original BubbleStats.vue icon exactly - fixed blue and rounding, independent of the theme settings
-    :root[data-theme-preset="bubble"] & .material-symbols-rounded {
-      background-color: #4CA9FF;
-      border-radius: 0.5em;
-    }
 
     .position {
       :deep(span) {

@@ -1,3 +1,4 @@
+import './BackwardsCompatibility.js'; // Must stay first so stored data is upgraded before anything reads it
 import { createApp } from 'vue'
 import App from '../vue/App.vue'
 import i18n from './i18n';

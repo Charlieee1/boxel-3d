@@ -9,9 +9,42 @@ No internet? No problem. Play offline to beat your high scores.
 
 Changelog:
 
+v2.9.4-m1.2.4
+- Re-enabled checkpoint glitch
+- Fixed bug: Settings menu wasn't consistent across all menus
+- Fixed bug: Stats setting wasn't saved across sessions
+- Fixed bug: Duplicate level names in the carousel caused problems with indexing
+- Fixed bug: Up arrow scrolled multiplayer chat
+- Fixed UI visuals
+- Organized level properties
+- Changed max zoom to 1000 in settings and level properties
+- Changed max zoom in level editor to 5000
+
+v2.9.4-m1.2.3
+- Fixed deterministic mode
+- Fixed bug when level had no set theme
+- Changed internal settings structure
+- Moved thumbnail storage to IndexedDB
+- Fixed zoom setting bugs
+- Changed default settings
+- Fixed camera bugs in level editor
+- Fixed undo/redo
+- Fixed multiselect box select
+- Added reset block property to reset camera rotation animation
+- Fixed jump indicator
+- Enabled manual respawn during death animation always
+- Fixed level editor popups
+- Fixed bugs
+
+v2.9.4-m1.2.2
+- Fixed level editor cube deletion bug while rotating
+
+v2.9.3-m1.2.2
+- Fixed deterministic mode
+
 v2.9.3-m1.2.1
-Fixed deterministic mode bugs
-Fixed jump indicator bug
+- Fixed deterministic mode bugs
+- Fixed jump indicator bug
 
 v2.9.3-m1.2.0
 - Fixed bugs
@@ -56,7 +89,7 @@ v2.9.2
 - Improved rope animation
 
 v2.9.1
-- Optimized collision detection
+- Optimize collision detection
 
 v2.9.0
 - Updated libraries
@@ -107,6 +140,8 @@ v2.8.1
 
 v2.8.0
 - Fixed text duplication bug
+- Fixed level editor file bug
+- Updated libraries
 
 v2.7.9
 - Added custom events for modding
@@ -166,8 +201,8 @@ v2.6.5
 - Improved performance on Mac (credit: Onionfist)
 
 v2.6.4
--Updated translations
--Fixed Old UI controls
+- Updated translations
+- Fixed Old UI controls
 
 v2.6.3
 - Added French translation (credit: R - G - C™)
@@ -218,7 +253,7 @@ v2.5.2
 - Updated Workshop UI
 - Updated Levels UI
 - Updated Mods UI
-- Fix Level Editor bugs
+- Fixed Level Editor bugs
 
 v2.5.1
 - Added theme selector to Level Editor
@@ -237,6 +272,7 @@ v2.4.2
 - Updated max time from 16 minutes to 11 days
 
 v2.4.1
+- Added theme selector to Level Editor
 - Added Steam Overlay (Steam only)
 - Added window size/position preferences (Steam only)
 
@@ -365,12 +401,15 @@ v2.1.1
 - Updated level backgrounds
 
 v2.1.0
-- Added new backgrounds
+- Added 7 new environments for each level pack
 - Fixed community level scores
 
 v2.0.0
 - Added new UI
 - Added option to switch to old UI
+
+v1.3.1
+- Fixed escape shortcut
 
 v1.3.0
 - Added FPS option
@@ -382,7 +421,7 @@ v1.3.0
 v1.2.1
 - Added a new community level
 - Added a new community Discord link
-- Update render logic
+- Updated render logic
 
 v1.2.0.4
 - Added camera rotation to level editor (right-click)
@@ -406,22 +445,22 @@ v1.2.0
 - Removed FPS limit
 
 v1.1.9.2
-- Added the option to upload custom skins
+- Added the option to upload custom skins (.jpg, .png, .webp)
 
 v1.1.9.1
 - Added new community levels
 
-v1.1.9.0
+v1.1.9
 - Added tab buttons for campaign and community levels
 
-v1.1.8.0
+v1.1.8
 - Added camera rotation when the gravity cube is triggered
 - Added camera motion option (default on)
 
 v1.1.7.2
 - Added new community levels
 
-v1.1.7.0
+v1.1.7
 - Added new "Reset Cube", this resets your scale, gravity direction, and removes the rope mode when touched
 - Added 3 new community levels
 - Updated minimum scale from 16 to 8 (small cubes)
@@ -440,13 +479,13 @@ v1.1.5.2
 v1.1.5.1
 - Fixed level 27 slip glitch
 
-v1.1.5.0
+v1.1.5
 - Added level 35
 - Added shortcuts to Level Maker (Undo, Redo, Save, Rotate, Scale, Delete)
 
 v1.1.4.4
 - Fixed menu height issue
-- Update manifest version from 2 to 3
+- Updated manifest version from 2 to 3
 
 v1.1.4.2 - January 29, 2021
 - Fixed rope attaching to invisible blocks
@@ -471,4 +510,74 @@ v1.1.0 - January 6, 2021
 
 v1.0.0 - December 5, 2020
 - Remove licenses, everything is free
-- Update logo
+- Updated logo
+
+v0.3.0
+- Added tester license for everyone
+- Added Google integration (backup, restore, etc.)
+
+v0.2.2
+- All skins are now free
+
+v0.2.1
+- Added custom skin option to shop
+
+v0.2.0
+- Added gravity cube
+- Added 5 new levels
+
+v0.1.9
+- Added gravity cube (experimental)
+
+v0.1.8
+- Added option to backup data
+- Added option to restore data
+
+v0.1.7
+- Added resize block
+- Remove shrink block
+- Remove grow block
+
+v0.1.6
+- Updated Tip cube behavior - now disappears when selected
+- Updated level 1, 5, 12 & 14
+- Added final level dialog
+
+v0.1.5
+- Added theme music
+- Updated skin render behavior
+
+v0.1.1
+- Added keyboard shortcuts (ex: R to restart, ESC to pause/return)
+
+v0.1.0
+- Added "MySkins" shop
+- Added 3 skins
+
+v0.0.7
+- Added level sharing (file only)
+- Added level downloading (file only)
+- Added level 11
+- Fixed level 6 wall glitch
+- Fixed old score value from preventing new records
+
+v0.0.6
+- Added speedometer
+- Updated time format from 12:34 to 12.345
+
+v0.0.5
+- Added background artwork
+
+v0.0.4
+- Added lighting for player
+
+v0.0.3
+- Added score saving system
+
+v0.0.2
+- Added timer to campaign
+
+v0.0.1
+- 10 levels
+- 8 block types
+- 3D Level Editor

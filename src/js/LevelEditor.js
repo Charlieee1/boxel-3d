@@ -1,4 +1,4 @@
-import { Euler, Mesh, MeshBasicMaterial, Object3D, Plane, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
+import { Euler, Matrix4, Mesh, MeshBasicMaterial, Object3D, Plane, Raycaster, SphereGeometry, Vector2, Vector3 } from 'three';
 import { Body, Composite, Engine, World } from 'matter-js';
 import { PuttyControls } from './PuttyControls';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls';
@@ -6,6 +6,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 // Scratch vector reused for world -> screen projection (multiselect marquee).
 const _screenVec = new Vector3();
+const _boxMatrix = new Matrix4();
+
+// Faces of a unit box as indices into its 8 corners (bit 0 = +x, bit 1 = +y, bit 2 = +z)
+const BOX_FACES = [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]];
 
 // Tuning for "P" chain physics' invisible settle simulation (see LevelEditor.settleChainAndBake) - a
 // one-time level-authoring aid, not a live gameplay loop, so these are UX-tuning constants rather than
@@ -43,7 +47,7 @@ class LevelEditor {
     this.controlsOrbit.touches = { ONE: 1, TWO: 3 }; // 0 = Rotate, 1 = Pan, 2 = Dolly pan, 3 = Dolly rotate
     this.controlsOrbit.zoomSpeed = 3;
     this.controlsOrbit.minDistance = 10;
-    this.controlsOrbit.maxDistance = 2000;
+    this.controlsOrbit.maxDistance = 5000;
     this.controlsOrbit.rotateSpeed = 0.5 // Default 1;
 		this.controlsOrbit.rotateSpeedDefault = 0.5 // Default 1;
     this.controlsOrbit.panSpeed = 1;
@@ -118,6 +122,7 @@ class LevelEditor {
       if (this.isMultiselectTransform()) this.updateGroupTransform();
       // Vertex/end snapping overrides putty's own built-in grid snap (see mouseDown() and applyVertexSnapToPutty()).
       else if (this.snapMode !== 'normal' && app.selectedObject) this.applyVertexSnapToPutty();
+      if (app.selectedObject) app.selectedObject.updateHelper(); // Hitbox follows the drag in real time
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
     this.controlsPutty.addEventListener('hoveron', () => { this.puttyHovering = true; });
@@ -151,6 +156,7 @@ class LevelEditor {
       else if (this.snapMode !== 'normal' && this.selectedMode === 'translate' && app.selectedObject) this.applyVertexSnapToSelection();
       // Same, for a scale drag - corrects scale (not position) since scale is symmetric about the object center.
       else if (this.snapMode !== 'normal' && this.selectedMode === 'scale' && app.selectedObject) this.applyVertexSnapToScale(app.selectedObject);
+      if (app.selectedObject) app.selectedObject.updateHelper(); // Hitbox follows the drag in real time
       window.dispatchEvent(new CustomEvent('objectChange', { detail: app.selectedObject }));
     });
 
@@ -548,7 +554,7 @@ class LevelEditor {
     var length = Math.hypot(endX - origin.x, endY - origin.y);
     var angle = Math.atan2(endY - origin.y, endX - origin.x);
     // Never collapse to a zero-length block; under vertex snap, honor a short-but-real snapped length (grid-snap floor would override a valid nearby vertex match).
-    var minLength = this.snapMode !== 'normal' ? 0.001 : app.mouse.snap;
+    var minLength = this.snapMode !== 'normal' ? 0.001 : (app.mouse.snap || 0.001);
     length = Math.max(length, minLength);
     endX = origin.x + Math.cos(angle) * length;
     endY = origin.y + Math.sin(angle) * length;
@@ -704,18 +710,56 @@ class LevelEditor {
       var obj = children[i];
       if (obj.isCube !== true || obj === app.player) continue;
       if (obj === this.exclusiveAction?.controlBlock) continue;
-      var s = this.projectToScreen(obj.position);
-      if (s.x >= left && s.x <= right && s.y >= top && s.y <= bottom) result.push(obj);
+      var corners = this.getScreenCorners(obj);
+      // Any covered part of the block selects it; fall back to its centre if part of it is behind the camera
+      if (corners == null) {
+        var s = this.projectToScreen(obj.position);
+        if (s.x >= left && s.x <= right && s.y >= top && s.y <= bottom) result.push(obj);
+      }
+      else if (BOX_FACES.some(face => this.polygonIntersectsRect(face.map(i => corners[i]), left, top, right, bottom))) result.push(obj);
     }
     return result;
   }
 
-  // Project a world position to 2D screen (client) coordinates.
+  // Project a block's 8 box corners (rotation and negative scale included) to screen space, or null if any is behind the camera
+  getScreenCorners(obj) {
+    _boxMatrix.compose(obj.position, obj.quaternion, obj.scale);
+    var corners = [];
+    for (var i = 0; i < 8; i++) {
+      var corner = new Vector3(i & 1 ? 0.5 : -0.5, i & 2 ? 0.5 : -0.5, i & 4 ? 0.5 : -0.5).applyMatrix4(_boxMatrix);
+      var s = this.projectToScreen(corner);
+      if (s.z > 1) return null;
+      corners.push(s);
+    }
+    return corners;
+  }
+
+  // Separating axis test between a convex screen polygon and an axis-aligned screen rect
+  polygonIntersectsRect(points, left, top, right, bottom) {
+    var rect = [{ x: left, y: top }, { x: right, y: top }, { x: right, y: bottom }, { x: left, y: bottom }];
+    var axes = [{ x: 1, y: 0 }, { x: 0, y: 1 }];
+    for (var i = 0; i < points.length; i++) {
+      var a = points[i], b = points[(i + 1) % points.length];
+      if (a.x !== b.x || a.y !== b.y) axes.push({ x: a.y - b.y, y: b.x - a.x });
+    }
+    var project = (list, axis) => {
+      var min = Infinity, max = -Infinity;
+      list.forEach(p => { var d = p.x * axis.x + p.y * axis.y; min = Math.min(min, d); max = Math.max(max, d); });
+      return { min, max };
+    };
+    return axes.every(axis => {
+      var p = project(points, axis), r = project(rect, axis);
+      return p.max >= r.min && r.max >= p.min;
+    });
+  }
+
+  // Project a world position to 2D screen (client) coordinates, with NDC depth (z > 1 means behind the camera).
   projectToScreen(position) {
     _screenVec.set(position.x, position.y, position.z).project(app.camera);
     return {
       x: (_screenVec.x * 0.5 + 0.5) * app.window.innerWidth,
-      y: (-_screenVec.y * 0.5 + 0.5) * app.window.innerHeight
+      y: (-_screenVec.y * 0.5 + 0.5) * app.window.innerHeight,
+      z: _screenVec.z
     };
   }
 
@@ -826,6 +870,7 @@ class LevelEditor {
       scale: { x: box.boxX, y: box.boxY, z: box.boxZ }
     });
     app.level.addObject(block);
+    block.helper.visible = false; // Temporary scaffolding, not a real block - no debug hitbox
     action.controlBlock = block;
 
     // Keep the control block translucent and cyan through normal selection (baseSelect would otherwise recolor it white); doesn't affect clicking.
@@ -1355,7 +1400,7 @@ class LevelEditor {
 
   renderGrid() {
     var settings = app.storage.getSettings();
-    var visible = settings.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
+    var visible = settings.levelEditor.visualGrid === true && (app.state == 'level-editor' || app.state == 'level-manager') && app.play == false;
     var canvas = this.ensureGridCanvas();
     canvas.style.display = visible ? 'block' : 'none';
     if (visible == false) return;
@@ -1431,7 +1476,7 @@ class LevelEditor {
     app.mouse.setPosition('up', app.mouse.getPosition(e));
 
     // Allow quick erase
-    if (e.button == 2) app.mouse.mode = 'erase';
+    if (e.button == 2 && this.controlsOrbit.moved == false) app.mouse.mode = 'erase';
 
     // Check if drawing or erasing
     if (app.mouse.mode == 'draw') {
@@ -1516,7 +1561,7 @@ class LevelEditor {
         }
       }
     }
-    else if (app.mouse.mode == 'erase') {
+    else if (app.mouse.mode == 'erase' && !(e.button == 2 && this.controlsOrbit.moved)) {
       this.eraseTarget(e);
     }
 
@@ -1735,6 +1780,7 @@ class LevelEditor {
   showCutOutError() {
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'editor',
         text: 'popup.text.invalid_cut_out',
         inputs: [
           { value: 'popup.button.close', type: 'button' }
@@ -2024,7 +2070,7 @@ class LevelEditor {
     this.savedHistoryIndex = app.levelHistory.historyIndex;
   }
 
-  exitLevel() {
+  exitLevel(page = 'level-manager', keepCheckpoint = false) {
     // Only prompt to save when there are edits AND they're unsaved since the last Ctrl+S/save-button.
     var hasEdits = app.levelHistory.history.length > 2;
     var unsaved = app.levelHistory.historyIndex !== this.savedHistoryIndex;
@@ -2032,19 +2078,20 @@ class LevelEditor {
       // Dispatch new popup from event
       window.dispatchEvent(new CustomEvent('openPopup', {
         detail: {
+          class: 'editor',
           text: 'popup.text.save_level',
           inputs: [
             { value: 'popup.button.cancel', type: 'button', callback: () => { window.dispatchEvent(new CustomEvent('closePopup')); }},
-            { value: 'popup.button.no', type: 'button', callback: () => { this.saveAndExitLevelEditor(false); window.dispatchEvent(new CustomEvent('closePopup')); }},
-            { value: 'popup.button.yes', type: 'button', callback: () => { this.saveAndExitLevelEditor(true); window.dispatchEvent(new CustomEvent('closePopup')); }},
+            { value: 'popup.button.no', type: 'button', callback: () => { this.saveAndExitLevelEditor(false, page, keepCheckpoint); window.dispatchEvent(new CustomEvent('closePopup')); }},
+            { value: 'popup.button.yes', type: 'button', callback: () => { this.saveAndExitLevelEditor(true, page, keepCheckpoint); window.dispatchEvent(new CustomEvent('closePopup')); }},
           ]
         }
       }));
     }
-    else this.saveAndExitLevelEditor(false);
+    else this.saveAndExitLevelEditor(false, page, keepCheckpoint);
   }
 
-  saveAndExitLevelEditor(saveLevel) {
+  saveAndExitLevelEditor(saveLevel, page = 'level-manager', keepCheckpoint = false) {
     // Safety net: resolve any active exclusive action on exit so it can't leave editor actions gated permanently.
     this.cancelAction();
 
@@ -2057,26 +2104,30 @@ class LevelEditor {
     app.level.clearLevel();
     app.levelHistory.clear();
     this.savedHistoryIndex = null; // next editor session starts "unsaved"
-    app.player.removeCheckpoint();
+    app.player.cancelRestart(); // A pending death respawn must not fire after leaving
+    if (keepCheckpoint == false) app.player.removeCheckpoint();
     app.player.setPosition({ x: 0, y: 0, z: 0 });
     this.controlsOrbit.enabled = false;
-    window.dispatchEvent(new CustomEvent('setPage', { detail: 'level-manager' }));
+    window.dispatchEvent(new CustomEvent('setPage', { detail: page }));
   }
 
   undo() {
+    if (this.exclusiveAction != null) return; // Reloading the level would leave the active action holding stale objects
     this.detachControls();
     app.levelHistory.undo();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
   redo() {
+    if (this.exclusiveAction != null) return; // Reloading the level would leave the active action holding stale objects
+    this.detachControls();
     app.levelHistory.redo();
     window.dispatchEvent(new CustomEvent('setSelectedObject'));
   }
 
   rewind() {
-    // Exiting to a clean edit state - never re-teleport to the temp spawn override here
-    app.level.retryLevel(true, false);
+    // Full restart to a clean edit state: player at its origin, checkpoint cleared, no temp spawn override
+    app.level.retryLevel(false, false);
     app.level.deselectLevel();
     app.levelEditor.detachControls();
     app.pauseLevel();
@@ -2118,33 +2169,51 @@ class LevelEditor {
     this.currentZ = value;
   }
 
-  // "[" resets camera Z + rotation to default, relative to the current Z-plane (see keybinds.md "Current Z").
-  // Uses controlsOrbit.reset() (same mechanism as the "Restart level" rewind) instead of raw camera writes,
-  // since OrbitControls recomputes the camera quaternion from its own internal state every frame and would
-  // otherwise silently fight/overwrite a direct camera.rotation.set() (causing a black-screen desync).
+  // "[" resets the camera onto the player, unrotated, at the default zoom relative to the current Z-plane
   resetCameraZRotation() {
-    var targetX = this.controlsOrbit.target.x;
-    var targetY = this.controlsOrbit.target.y;
-    this.controlsOrbit.reset();
-    this.controlsOrbit.target.x = targetX;
-    this.controlsOrbit.target.y = targetY;
-    app.camera.position.x = targetX;
-    app.camera.position.y = targetY;
-    app.camera.position.z += this.currentZ;
+    var player = app.player.position;
+    this.controlsOrbit.target.set(player.x, player.y, player.z);
+    app.camera.position.set(player.x, player.y, app.camera.position.zDefault + this.currentZ);
+    app.camera.rotation.set(0, 0, 0);
     this.controlsOrbit.update();
     app.camera.updateMatrixWorld();
     this.updateRender();
   }
 
+  // Entering a level: camera looks straight at 0,0 at the level's zoom, saved as the orbit reset state
+  resetCameraToOrigin() {
+    app.camera.position.zDefault = app.level.zoom || app.storage.getSettings().invalidatingSettings.zoom;
+    app.camera.position.set(0, 0, app.camera.position.zDefault);
+    app.camera.rotation.set(0, 0, 0);
+    this.controlsOrbit.target.set(0, 0, 0);
+    this.controlsOrbit.update();
+    app.camera.updateMatrixWorld();
+    this.controlsOrbit.saveState();
+  }
+
+  // Reset camera state: zoomed out to the zoom setting and looking straight at the player
+  isCameraReset() {
+    var camera = app.camera.position;
+    var target = this.controlsOrbit.target;
+    var player = app.player.position;
+    var epsilon = 0.001;
+    return Math.abs(camera.x - player.x) < epsilon && Math.abs(camera.y - player.y) < epsilon && Math.abs(camera.z - camera.zDefault) < epsilon &&
+      Math.abs(target.x - player.x) < epsilon && Math.abs(target.y - player.y) < epsilon;
+  }
+
   // "]" popup: type an exact camera X or Y directly.
   setCameraX(value) {
-    app.camera.position.x = parseFloat(value) || 0;
+    var delta = (parseFloat(value) || 0) - app.camera.position.x;
+    app.camera.position.x += delta;
+    this.controlsOrbit.target.x += delta; // Pan the orbit target too so the view direction is kept
     app.camera.updateMatrixWorld();
     this.updateRender();
   }
 
   setCameraY(value) {
-    app.camera.position.y = parseFloat(value) || 0;
+    var delta = (parseFloat(value) || 0) - app.camera.position.y;
+    app.camera.position.y += delta;
+    this.controlsOrbit.target.y += delta; // Pan the orbit target too so the view direction is kept
     app.camera.updateMatrixWorld();
     this.updateRender();
   }

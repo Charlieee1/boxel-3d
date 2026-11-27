@@ -10,6 +10,7 @@
   const i18n = useI18n({ useScope: 'global' });
   const credit = ref('');
   const isClosed = ref(true); // Popup animation state
+  const isSettingsOpen = ref(false); // Game keys are ignored while settings is open
   const isClosing = ref(false);
   const isInputEnabled = ref(true);
   const record = ref();
@@ -22,6 +23,7 @@
     window.addEventListener('popupClosing', popupClosing);
     window.addEventListener('beforeSettingsOpened', settingsOpened);
     window.addEventListener('beforeSettingsClosed', settingsClosed);
+    window.addEventListener('settingsClosed', settingsFullyClosed);
     window.addEventListener('pointerdown', pointerdown);
     window.addEventListener('keydown', keydown);
     window.addEventListener('keyup', keyup);
@@ -35,6 +37,7 @@
     window.removeEventListener('popupClosing', popupClosing);
     window.removeEventListener('beforeSettingsOpened', settingsOpened);
     window.removeEventListener('beforeSettingsClosed', settingsClosed);
+    window.removeEventListener('settingsClosed', settingsFullyClosed);
     window.removeEventListener('pointerdown', pointerdown);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('keyup', keyup);
@@ -48,6 +51,7 @@
     app.pauseLevel();
     window.dispatchEvent(new CustomEvent('openPopup', {
       detail: {
+        class: 'pause',
         text: i18n.t('popup.text.paused'),
         inputs: [
           { value: i18n.t('popup.button.exit'), type: 'button', shortcut: 'KeyE', callback: function(e) { app.exitCampaign(); }},
@@ -75,11 +79,17 @@
   }
 
   function settingsOpened() {
+    isSettingsOpen.value = true;
     app.pauseLevel();
   }
   
   function settingsClosed() {
     app.resumeLevel();
+  }
+
+  // Cleared after the close finishes so the key that closed settings (Escape/E) isn't also handled here
+  function settingsFullyClosed() {
+    isSettingsOpen.value = false;
   }
 
   function pointerdown(e) {
@@ -91,6 +101,8 @@
   }
 
   function keydown(e) {
+    if (isSettingsOpen.value == true) return;
+
     // Make sure popup is closed
     if (isClosed.value == true || isClosing.value === true) {
       // Ignore events from inputs
@@ -120,6 +132,7 @@
         }
         else {
           var jumpKeys = ['Space', 'Enter', 'ArrowUp', 'KeyW'];
+          if (e.code == 'ArrowUp') e.preventDefault(); // Don't also scroll the multiplayer chat
           if (isInputEnabled.value === true && jumpKeys.indexOf(e.code) > -1) {
             // Jump if one of the keys is pressed
             app.player.jump();
@@ -167,7 +180,7 @@
 </script>
 
 <template>
-  <div class="page">
+  <div class="page campaign">
     <div class="nav">
       <div class="score fade-in" @click="pauseLevel()" :title="i18n.t('campaign.button.pause')">
         <div class="current">
