@@ -146,6 +146,7 @@
       "title": "Data"
     },
     "general": {
+      "anti_lag": "Anti-Lag",
       "autosave": "Autosave",
       "autosave_minutes": "{n} min",
       "autosave_off": "Off",

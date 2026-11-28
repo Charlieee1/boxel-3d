@@ -22,7 +22,6 @@
   - Skins
 - Deterministic mode fine-control settings
 - Cap FPS to 60 (disable interpolation)
-- Anti lag (does extra physics simulation calls between rendering calls to catch up)
 - Separate moving background from rotating camera
 - Change old backgrounds setting to background & default block recolour and apply to all levels
 - Clean thumbnails setting

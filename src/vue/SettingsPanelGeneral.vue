@@ -83,6 +83,10 @@
         </label>
       </div>
       <div class="option">
+        <input type="checkbox" id="antiLag" data-setting="general.antiLag" :checked="settings.general.antiLag == true" @change="$emit('updateSettings', $event)">
+        <label for="antiLag">{{ i18n.t('settings.general.anti_lag') }}</label>
+      </div>
+      <div class="option">
         <input type="checkbox" id="deterministic" data-setting="invalidatingSettings.deterministic" :checked="settings.invalidatingSettings.deterministic == true" @change="onChange('updateSettings', $event)">
         <label for="deterministic">
           <span v-if="!isDeterministicValid" class="material-symbols-rounded" :data-title="i18n.t('settings.general.deterministic_badge')">verified_off</span>

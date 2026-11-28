@@ -314,6 +314,7 @@ class StorageManager {
         statsMode: 'fps'
       },
       general: {
+        antiLag: false,
         deathParticleColour: '#dc265a',
         deterministicMath: 'firefox',
         disableTextboxes: false,

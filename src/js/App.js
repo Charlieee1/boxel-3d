@@ -49,6 +49,9 @@ class App {
     // Set time components
     this.timer = new Timer();
     this.interval = new Interval();
+    this.lagTime = 0; // Anti-lag: physics time the engine loop dropped on slow frames, still to catch up
+    this.lagBudget = 12; // Anti-lag: max milliseconds per frame spent on physics before catching up stops
+    this.tickTime = 0; // Duration of the last physics tick (ms)
     this.then = new Date().getTime();
     this.now = this.then;
     this.delta = 0;
@@ -172,7 +175,7 @@ class App {
 
     // Add physics & render loops
     this.interval.add(loop => this.updateEngine(loop), 1000 / 60);
-    this.interval.add(loop => this.updateRender(loop));
+    this.interval.add(loop => { this.updateAntiLag(loop); this.updateRender(loop); }); // Only real frames catch up
     this.interval.add(loop => this.updateNetwork(loop), 1000 / 8);
     this.multiplayer.setTick(8);
     this.interval.start();
@@ -198,7 +201,9 @@ class App {
       this.player.updateRope();
 
       // Update world engine
+      var tickStart = performance.now();
       Engine.update(this.engine, delay);
+      this.tickTime = performance.now() - tickStart;
       this.player.jumpPending = false; // Any pending jump force was applied (and cleared) by this tick
 
       // Deterministic mode: fall-out kills and death respawn run on physics ticks, not render frames/setTimeout
@@ -210,6 +215,23 @@ class App {
       // Dispatch engine event
       this.eventEngineUpdated.detail.delay = delay;
       window.dispatchEvent(this.eventEngineUpdated);
+    }
+  }
+
+  // Anti-lag: the engine loop steps at most once per frame, so run the ticks it dropped before rendering
+  updateAntiLag({ delta, timestamp }) {
+    var engineLoop = this.interval.get(0);
+    var isAntiLag = this.storage.readSettings().general.antiLag === true;
+    if (isAntiLag == false || this.play != true || engineLoop.paused === true) { this.lagTime = 0; return; }
+
+    // Owed time is capped at 5 ticks so long stalls (ex: a hidden tab) don't snowball
+    var dropped = Math.max(0, delta - engineLoop.delay * this.interval.speed);
+    this.lagTime = Math.min(this.lagTime + dropped, engineLoop.delay * 5);
+
+    // Catch up only while another tick fits in the frame's physics budget, so heavy levels keep their frame rate
+    while (this.lagTime >= engineLoop.delay && performance.now() - timestamp + this.tickTime <= this.lagBudget) {
+      this.lagTime -= engineLoop.delay;
+      this.updateEngine(engineLoop);
     }
   }
 
