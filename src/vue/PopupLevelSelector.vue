@@ -1,5 +1,5 @@
 <script setup>
-  import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, nextTick, onMounted, onUnmounted, ref, toRaw } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Utility } from '../js/Utility.js';
   import { levels as levelData, themes as themeData } from '../js/Data.js';
@@ -153,7 +153,7 @@
 
   async function playSelectedLevel() {
     // Popup levels are copies in pack order, so their index finds the exact level entry (titles can be duplicated)
-    const index = levels.value.indexOf(selectedLevel.value);
+    const index = levels.value.indexOf(toRaw(selectedLevel.value)); // Unwrap the ref's proxy to find the original entry
     await app.playLevel({ ...selectedLevel.value, source: app.level.getLevelByIndex(index) });
     window.dispatchEvent(new CustomEvent('setPage', { detail: 'campaign' }));
 
@@ -590,6 +590,7 @@
             ul {
               overflow-x: hidden;
               overflow-y: auto;
+              scroll-padding: 0; // The shared 2.5em list padding exceeds this short box, which blocks wheel scrolling in Firefox
 
               li {
                 line-height: 0.75em;

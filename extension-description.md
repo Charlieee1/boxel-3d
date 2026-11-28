@@ -12,6 +12,7 @@ Changelog:
 v2.9.4-m1.3.0
 - Optimized performance
 - Added random level button
+- Made long level credits scroll
 
 v2.9.4-m1.2.4
 - Re-enabled checkpoint glitch

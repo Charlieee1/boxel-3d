@@ -1,6 +1,7 @@
 <script setup>
-  import { ref, onMounted, onUnmounted } from 'vue';
+  import { ref, nextTick, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { Utility } from '../js/Utility.js';
   import ButtonCheckpoint from './ButtonCheckpoint.vue';
   import ButtonSettings from './ButtonSettings.vue';
   import Controls from './Controls.vue';
@@ -8,7 +9,9 @@
 
   // Initialize variables
   const i18n = useI18n({ useScope: 'global' });
+  const util = new Utility();
   const credit = ref('');
+  const creditRef = ref(); // Clipping box around the credit text
   const isClosed = ref(true); // Popup animation state
   const isSettingsOpen = ref(false); // Game keys are ignored while settings is open
   const isClosing = ref(false);
@@ -18,6 +21,7 @@
   // Add event listener(s)
   function addEventListeners() {
     window.addEventListener('setCredit', setCredit);
+    window.addEventListener('resize', updateCreditScroll);
     window.addEventListener('popupOpened', popupOpened);
     window.addEventListener('popupClosed', popupClosed);
     window.addEventListener('popupClosing', popupClosing);
@@ -32,6 +36,7 @@
   // Remove event listeners
   function removeEventListeners() {
     window.removeEventListener('setCredit', setCredit);
+    window.removeEventListener('resize', updateCreditScroll);
     window.removeEventListener('popupOpened', popupOpened);
     window.removeEventListener('popupClosed', popupClosed);
     window.removeEventListener('popupClosing', popupClosing);
@@ -45,6 +50,12 @@
 
   function setCredit(e) {
     if (e.detail.text) credit.value = e.detail.text;
+    updateCreditScroll();
+  }
+
+  // Long credits scroll to their end, pause, then restart
+  function updateCreditScroll() {
+    nextTick(function() { util.scrollOverflowingText(creditRef.value); });
   }
 
   function pauseLevel() {
@@ -197,7 +208,9 @@
       <ButtonSettings class="button right fade-in" />
     </div>
     <div class="footer">
-      <div id="credit" class="credit button fade-in disabled" v-html="credit" v-if="credit"></div>
+      <div id="credit" class="credit button fade-in disabled" v-if="credit">
+        <div class="credit-text" ref="creditRef"><span v-html="credit"></span></div>
+      </div>
       <Controls />
     </div>
   </div>

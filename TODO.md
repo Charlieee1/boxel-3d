@@ -34,8 +34,6 @@
   - For level editor, setting
 - Show only levels not completed by player in level select menu
 - Pre-load next level
-- Make long level credits scroll
-- Random level button
 
 # Extra features
 - Gravity preservation glitch working for campaign levels

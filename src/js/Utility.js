@@ -184,6 +184,25 @@ class Utility {
     return _inlineSvgCache[url];
   }
 
+  // Slides a box's first child to its end if wider than the box, pauses, then restarts (speed in box ems/second)
+  scrollOverflowingText(box, speed = 2, pause = 1000) {
+    const text = box?.firstElementChild;
+    if (text == null) return;
+    text.getAnimations().forEach(function(animation) { animation.cancel(); });
+
+    const distance = text.offsetWidth - box.clientWidth;
+    if (distance <= 0) return; // Fits, nothing to scroll
+
+    const scrollTime = distance / (parseFloat(getComputedStyle(box).fontSize) * speed) * 1000;
+    const total = scrollTime + pause;
+    const end = `translateX(${-distance}px)`;
+    text.animate([
+      { transform: 'translateX(0px)' },
+      { transform: end, offset: scrollTime / total },
+      { transform: end }
+    ], { duration: total, iterations: Infinity, delay: pause }); // Waits once before the first scroll
+  }
+
   openLink(url, target = '_blank') {
     if (window.chrome?.tabs) window.chrome.tabs.create({ url: url });
     else if (window.desktop?.openExternal && target === '_blank') window.desktop.openExternal(url);

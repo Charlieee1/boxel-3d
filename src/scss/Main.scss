@@ -460,12 +460,23 @@
       }
 
       .credit {
+        justify-content: flex-start; // Long text starts at the left edge instead of overflowing both sides
+        max-width: 50%; // Longer credits scroll instead
         padding: 0.5em 1em;
         position: absolute;
         left: 50%;
         margin-left: auto;
         transform: translateX(-50%);
         white-space: nowrap;
+
+        .credit-text {
+          min-width: 0;
+          overflow: hidden; // Clips the scrolling text; it's moved by script, never scrolled manually
+
+          span {
+            display: inline-block; // Lets the text be translated
+          }
+        }
       }
     }
   }
