@@ -61,7 +61,8 @@
     "button": {
       "discord": "Discord",
       "exit": "Salir a la página de inicio (ESC)",
-      "play": "Jugar"
+      "play": "Jugar",
+      "random": "Nivel aleatorio"
     },
     "title": "Jugar"
   },

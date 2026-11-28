@@ -61,7 +61,8 @@
     "button": {
       "discord": "Discord",
       "exit": "홈으로 바로가기 (ESC)",
-      "play": "플레이"
+      "play": "플레이",
+      "random": "무작위 레벨"
     },
     "title": "플레이"
   },

@@ -46,12 +46,18 @@ class RenderGrid {
   }
 
   build() {
+    this.clear();
+    this.refresh();
+  }
+
+  // Forgets every object, so a cleared level's blocks can be freed; the next render builds again
+  clear() {
     this.layers = new Map();
     this.largeObjects = new Set();
     this.unboxed = new Set();
     this.registered.forEach(object => object._renderGrid = null);
     this.registered = new Set();
-    this.refresh();
+    this.builtVersion = null;
   }
 
   // Brings the cells up to date: only objects added, removed or moved since they were registered get (re)bucketed

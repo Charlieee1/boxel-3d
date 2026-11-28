@@ -62,7 +62,8 @@
     "button": {
       "discord": "Discord",
       "exit": "Exit to home (ESC)",
-      "play": "Play"
+      "play": "Play",
+      "random": "Random level"
     },
     "title": "Play"
   },

@@ -61,7 +61,8 @@
     "button": {
       "discord": "Discord",
       "exit": "होम पर लौटो (ESC)",
-      "play": "खेलो"
+      "play": "खेलो",
+      "random": "रैंडम लेवल"
     },
     "title": "खेलो"
   },

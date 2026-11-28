@@ -235,6 +235,9 @@ class Level extends Group {
       detach(this, child);
       if (child !== app.player) this.disposeObject(child);
     });
+    this.dynamicObjects = []; // Already marked for rebuilding, but would keep the old ones in memory until then
+    if (app.collision) app.collision.reconcileAfterReset(); // Contacts with removed blocks, pruned now instead of at the next reset
+    if (app.releaseLevelReferences) app.releaseLevelReferences();
   }
 
   // Attempts to link exactly one pair of blocks whose nearest ends coincide (within 1e-6, float-rounding

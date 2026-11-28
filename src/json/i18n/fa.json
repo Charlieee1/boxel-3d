@@ -61,7 +61,8 @@
     "button": {
       "discord": "Discord",
       "exit": "رفتن به خانه (ESC)",
-      "play": "بازی"
+      "play": "بازی",
+      "random": "مرحله تصادفی"
     },
     "title": "بازی"
   },

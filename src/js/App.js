@@ -581,6 +581,14 @@ class App {
     return (this.state == 'level-editor' && this.levelEditor != null) ? this.levelEditor.getActiveObjects() : [];
   }
 
+  // Drops what the culling grids and caches still hold of a cleared level, so its blocks can be freed
+  releaseLevelReferences() {
+    this.renderGrid.clear();
+    this.physicsGrid.clear();
+    this.levelOrder = null;
+    this.levelOrderVersion = null;
+  }
+
   // Level objects the camera may see, in level order (so picking ties resolve as before), or null when culling isn't active
   getVisibleLevelObjects() {
     if (!this.isRenderGridActive() || this.renderGrid.enabled == false) return null;

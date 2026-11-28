@@ -60,6 +60,19 @@ class PhysicsGrid {
     return found.sort((a, b) => a._cullIndex - b._cullIndex);
   }
 
+  // Forgets every body after the level is cleared, so they can be freed; the next update rebuilds from the world
+  clear() {
+    this.cells = new Map();
+    this.alwaysStatics = [];
+    this.dynamics = [];
+    this.list = null;
+    this.allBodies = null;
+    this.movingBodies = [];
+    this.staticCount = -1;
+    this.buildId++;
+    if (this.engine.world.isModified) Detector.setBodies(this.engine.detector, []); // Engine.update replaces a modified world's list anyway, and the engine only updates while playing
+  }
+
   // Rebuilds from every body in the world, for when static bodies changed in the middle of a run (editor edits while paused)
   refresh() {
     Detector.setBodies(this.engine.detector, Composite.allBodies(this.engine.world));

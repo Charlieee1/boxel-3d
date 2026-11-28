@@ -155,6 +155,12 @@
     window.dispatchEvent(new CustomEvent('openLevelSelectorPopup'));
   }
 
+  function selectRandomLevel() {
+    // Click a random unselected level so the carousel's normal selection path runs without playing it
+    var others = document.querySelectorAll('.content .carousel .item:not(.add-button):not(.selected)');
+    if (others.length > 0) others[Math.floor(Math.random() * others.length)].click();
+  }
+
   function openDiscord() {
     util.openLink('https://discord.gg/j8fvd4UvbE', '_blank');
   }
@@ -205,6 +211,9 @@
       </a>
       <a class="button fade-in right" @click="openLevelSelector" :title="i18n.t('popup.text.search')">
         <span class="material-symbols-rounded">search</span>
+      </a>
+      <a class="button fade-in" @click="selectRandomLevel" :title="i18n.t('level_picker.button.random')">
+        <img :src="'./svg/random.svg'">
       </a>
       <a class="button fade-in" @click="openDiscord" :title="i18n.t('level_picker.button.discord')">
         <img :src="'./svg/discord.svg'">

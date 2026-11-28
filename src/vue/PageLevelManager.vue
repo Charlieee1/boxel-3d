@@ -19,7 +19,7 @@
 
   function updateLevelItems() {
     // Add empty level if none exist
-    items.value = app.storage.getListOfLevels();
+    items.value = app.storage.getListOfLevels().map(item => ({ key: item.key, level: { name: item.level.name } })); // Only names are shown, a full copy of every saved level would stay in memory
     if (items.value.length < 1) addLevel();
   }
 
@@ -29,7 +29,7 @@
     app.level.createNewLevel();
     levelData = app.level.exportToJSON(); // Init default data
     key = app.storage.setLevelData(null, levelData); // Store data and generate new key
-    items.value.push({ key: key, level: levelData });
+    items.value.push({ key: key, level: { name: levelData.name } });
   }
 
   function importLevel(e) {
